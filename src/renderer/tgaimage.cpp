@@ -8,8 +8,13 @@
 #include <vector>
 #include <array>
 #include <string_view>
+#include <bit>
 
-TGAImage::TGAImage(const int width, const int height, const int bpp, TGAColor color) : w(width), h(height), bpp(bpp), data(w*h*bpp, 0) {
+TGAImage::TGAImage(const int width, const int height, const int bpp, TGAColor color)
+  : w(width), h(height), bpp(bpp)
+{
+  auto data_size = static_cast<std::size_t>(w * h * static_cast<int>(bpp));
+  data = std::vector<std::uint8_t>(data_size, 0);
   for (int j=0; j<height; j++){
 	for (int i=0; i<width; i++){
             set(i, j, color);
@@ -25,17 +30,16 @@ TGAImage::TGAImage(const int width, const int height, const int bpp, TGAColor co
   bgra[3] = alpha;
 }
 
-TGAColor::TGAColor(std::uint8_t blue, std::uint8_t green, std::uint8_t red, std::uint8_t alpha, uint8_t bpp)
+TGAColor::TGAColor(std::uint8_t blue, std::uint8_t green, std::uint8_t red, std::uint8_t alpha, uint8_t bpp) : bytespp(bpp)
 {
   bgra[0] = blue;
   bgra[1] = green;
   bgra[2] = red;
   bgra[3] = alpha;
 
-  bytespp = bpp;
 }
 
-bool TGAImage::read_tga_file(const std::string filename) {
+bool TGAImage::read_tga_file(const std::string& filename) {
     std::ifstream instream;
     instream.open(filename, std::ios::binary);
     if (!instream.is_open()) {
@@ -50,15 +54,15 @@ bool TGAImage::read_tga_file(const std::string filename) {
     }
     w   = header.width;
     h   = header.height;
-    bpp = header.bitsperpixel>>3;
+    bpp = header.bitsperpixel>> (static_cast<uint8_t>(3));
     if (w<=0 || h<=0 || (bpp!=GRAYSCALE && bpp!=RGB && bpp!=RGBA)) {
         std::cerr << "bad bpp (or width/height) value\n";
         return false;
     }
-    size_t nbytes = bpp*w*h;
+    const auto nbytes = static_cast<size_t>(static_cast<int>(bpp)*w*h);
     data = std::vector<std::uint8_t>(nbytes, 0);
     if (Datatypecode::UNCOMPRESSED_WB==header.datatypecode || Datatypecode::UNCOMPRESSED_RGB==header.datatypecode) {
-        instream.read(reinterpret_cast<char *>(data.data()), nbytes);
+	  instream.read(reinterpret_cast<char *>(data.data()), static_cast<std::streamsize>(nbytes));
         if (!instream.good()) {
             std::cerr << "an error occured while reading the data\n";
             return false;
@@ -72,18 +76,20 @@ bool TGAImage::read_tga_file(const std::string filename) {
 	  std::cerr << "unknown file format " << static_cast<int>(header.datatypecode) << "\n";
         return false;
     }
-    if (!(header.imagedescriptor & Imagedescriptor::TOP_LEFT)){
+    if (!(static_cast<bool>(header.imagedescriptor & Imagedescriptor::TOP_LEFT))){
         flip_vertically();
 	}
-    if (header.imagedescriptor & Imagedescriptor::BOTTOM_RIGHT){
+    if (static_cast<bool>(header.imagedescriptor & Imagedescriptor::BOTTOM_RIGHT)){
         flip_horizontally();
 	}
-    std::cerr << w << "x" << h << "/" << bpp*8 << "\n";
+	int bits_in_byte = 8;
+    std::cerr << w << "x" << h << "/" << bpp*bits_in_byte << "\n";
     return true;
 }
 
 bool TGAImage::load_rle_data(std::ifstream &instream) {
-    size_t pixelcount = w*h;
+  const auto pixelcount = static_cast<size_t>(w*h);
+  const int maxpixelcount = 128;
     size_t currentpixel = 0;
     size_t currentbyte  = 0;
     TGAColor colorbuffer {};;
@@ -94,15 +100,15 @@ bool TGAImage::load_rle_data(std::ifstream &instream) {
             std::cerr << "an error occured while reading the data\n";
             return false;
         }
-        if (chunkheader<128) {
+        if (chunkheader<maxpixelcount) {
             chunkheader++;
-            for (int i=0; i<chunkheader; i++) {
+            for (unsigned int i=0; i<chunkheader; i++) {
                 instream.read(reinterpret_cast<char *>(colorbuffer.bgra), bpp);
                 if (!instream.good()) {
                     std::cerr << "an error occured while reading the header\n";
                     return false;
                 }
-                for (int channel=0; channel<bpp; channel++){
+                for (int channel=0; channel <static_cast<int>(bpp); channel++){
                     data[currentbyte++] = colorbuffer.bgra[channel];
 				}
                 currentpixel++;
@@ -112,14 +118,14 @@ bool TGAImage::load_rle_data(std::ifstream &instream) {
                 }
             }
         } else {
-            chunkheader -= 127;
+		  chunkheader -= (maxpixelcount-1);
             instream.read(reinterpret_cast<char *>(colorbuffer.bgra), bpp);
             if (!instream.good()) {
                 std::cerr << "an error occured while reading the header\n";
                 return false;
             }
-            for (int i=0; i<chunkheader; i++) {
-			  for (int channel=0; channel<bpp; channel++){
+            for (int i=0; i<static_cast<int>(chunkheader); i++) {
+			  for (int channel=0; channel<static_cast<int>(bpp); channel++){
                     data[currentbyte++] = colorbuffer.bgra[channel];
 			  }
                 currentpixel++;
@@ -133,7 +139,7 @@ bool TGAImage::load_rle_data(std::ifstream &instream) {
     return true;
 }
 
-bool TGAImage::write_tga_file(const std::string filename, const bool vflip, const bool rle) const
+bool TGAImage::write_tga_file(const std::string& filename, const bool vflip, const bool rle) const
 {
   constexpr std::array<std::uint8_t, 4> developer_area_ref = { 0, 0, 0, 0 };
   constexpr std::array<std::uint8_t, 4> extension_area_ref = { 0, 0, 0, 0 };
@@ -147,9 +153,9 @@ bool TGAImage::write_tga_file(const std::string filename, const bool vflip, cons
     return false;
   }
   TGAHeader header = {};
-  header.bitsperpixel = bpp << 3;
-  header.width = w;
-  header.height = h;
+  header.bitsperpixel = bpp << static_cast<uint8_t>(3);
+  header.width = static_cast<uint16_t>(w);
+  header.height = static_cast<uint16_t>(h);
   header.datatypecode = (bpp == GRAYSCALE ? (rle ? Datatypecode::COMPRESSED_WB : Datatypecode::UNCOMPRESSED_WB) : (rle ? Datatypecode::RLE_RGB : Datatypecode::UNCOMPRESSED_RGB));
   header.imagedescriptor = vflip ? Imagedescriptor::BOTTOM_LEFT : Imagedescriptor::TOP_LEFT;// top-left or bottom-left origin
   out.write(reinterpret_cast<const char *>(&header), sizeof(header));
@@ -158,7 +164,7 @@ bool TGAImage::write_tga_file(const std::string filename, const bool vflip, cons
     return false;
   }
   if (!rle) {
-    std::span<const uint8_t> data_span(data);
+    const std::span<const uint8_t> data_span(data);
     auto bytes = std::as_bytes(data_span);
     // out.write(reinterpret_cast<const char *>(data.data()), w*h*bpp);
     out.write(std::bit_cast<const char *>(bytes.data()), w * h * bpp);
@@ -190,17 +196,17 @@ bool TGAImage::write_tga_file(const std::string filename, const bool vflip, cons
 
 bool TGAImage::unload_rle_data(std::ofstream &out) const {
     const std::uint8_t max_chunk_length = 128;
-    size_t npixels = w*h;
+    const auto npixels = static_cast<size_t>(w*h);
     size_t curpix = 0;
     while (curpix<npixels) {
-        size_t chunkstart = curpix*bpp;
-        size_t curbyte = curpix*bpp;
+	    size_t chunkstart = curpix*static_cast<size_t>(bpp);
+        size_t curbyte = curpix*static_cast<size_t>(bpp);
         std::uint8_t run_length = 1;
         bool raw = true;
         while (curpix+run_length<npixels && run_length<max_chunk_length) {
             bool succ_eq = true;
-            for (int channel=0; succ_eq && channel<bpp; channel++){
-                succ_eq = (data[curbyte+channel]==data[curbyte+channel+bpp]);
+            for (int channel=0; succ_eq && channel<static_cast<int>(bpp); channel++){
+			  succ_eq = (data[curbyte+static_cast<size_t>(channel)]==data[curbyte+static_cast<size_t>(channel+bpp)]);
 			}
             curbyte += bpp;
             if (1==run_length){
@@ -216,7 +222,7 @@ bool TGAImage::unload_rle_data(std::ofstream &out) const {
             run_length++;
         }
         curpix += run_length;
-        out.put(raw ? run_length-1 : run_length+127);
+        out.put(raw ? run_length-1 : run_length+max_chunk_length-1);
         if (!out.good()) {return false;}
         out.write(reinterpret_cast<const char *>(data.data()+chunkstart), (raw?run_length*bpp:bpp));
         if (!out.good()) {return false;}
@@ -228,7 +234,7 @@ TGAColor TGAImage::get(const int x, const int y) const {
   if (!data.size() || x<0 || y<0 || x>=w || y>=h) {return {};}
   TGAColor ret(0, 0, 0, 0, bpp);
     const std::uint8_t *pointer = data.data()+((x+y*w)*bpp);
-    for (int i=bpp; i--; ret.bgra[i] = pointer[i]);
+    for (int i=bpp; static_cast<bool>(i--); ret.bgra[i] = pointer[i]) {;}
     return ret;
 }
 
