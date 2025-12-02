@@ -26,10 +26,18 @@ struct TGAColor {
     std::uint8_t bytespp = 4;
     std::uint8_t& operator[](const int i) { return bgra[i]; }
     const std::uint8_t& operator[](const int i) const { return bgra[i]; }
+public:
+  TGAColor(std::uint8_t blue,std::uint8_t green, std::uint8_t red, std::uint8_t alpha);
+  TGAColor(std::uint8_t blue,std::uint8_t green, std::uint8_t red, std::uint8_t alpha, uint8_t bpp);
+  TGAColor() = default;
+  
 };
 
 struct TGAImage {
     enum Format { GRAYSCALE=1, RGB=3, RGBA=4 };
+    enum Datatypecode {UNCOMPRESSED_RGB = 2, UNCOMPRESSED_WB = 3, RLE_RGB = 10, COMPRESSED_WB=11};
+  enum Imagedescriptor : std::uint8_t {TOP_LEFT=0x20, BOTTOM_RIGHT=0x10, BOTTOM_LEFT=0x00};
+  
     TGAImage() = default;
     TGAImage(const int w, const int h, const int bpp, TGAColor c = {});
     bool  read_tga_file(const std::string filename);
