@@ -21,7 +21,7 @@ public:
 
   [[nodiscard]] T get_x() const { return vertex_coords.at(0); }
   [[nodiscard]] T get_y() const { return vertex_coords.at(1); }
-  [[nodiscard]] T get_z() const { return vertex_coords.at(2); }  
+  [[nodiscard]] T get_z() const { return vertex_coords.at(2); }
 
   void print() const {std::print("x = {0}, y = {1}, z = {2}\n", vertex_coords.at(0), vertex_coords.at(1), vertex_coords.at(2));}
 };
@@ -58,7 +58,22 @@ public:
   void printFaces() const
   {
     for (const auto &face : faces) { face.print(); }
-  }    
+  }
+
+  void viewport_transform(TGAImage &img)
+  {
+    const int half_height = img.height() / 2;
+	const int half_width =  img.width()  / 2;
+	for (auto &vert : vertices) {
+	   auto current_x = vert.get_x();
+	   auto current_y = vert.get_y();
+	   vert.vertex_coords.at(0) = (current_x + static_cast<T>(1)) * half_width;
+	   vert.vertex_coords.at(1) = (current_y + static_cast<T>(1)) * half_height;
+	   vert.vertex_coords.at(2) = 0;
+	}
+	  
+  }
+
 };
 
 template <typename T>
@@ -88,7 +103,7 @@ bool read_obj(const std::filesystem::path &obj_file_path, OBJObject<T>& obj_obje
 	  int tri1 {};
 	  int tri2 {};
 	  int tri3 {};
-	  std::string trig_data = line.substr(symbol_end_index);
+	  const std::string trig_data = line.substr(symbol_end_index);
 	  std::stringstream trig_data_stream(trig_data);
 	  trig_data_stream >> tri1;
 	  trig_data_stream.ignore(std::numeric_limits<std::streamsize>::max(), ' ');
@@ -197,47 +212,46 @@ int main([[maybe_unused]]int argc,[[maybe_unused]] const char** argv){
   constexpr int width  = 64;
   constexpr int height = 64;
   TGAImage framebuffer(width, height, TGAImage::RGB);
+  TGAImage diablo_fb(800, 800, TGAImage::RGB);  
 
 
   //points
-  constexpr int ax =  7;
-  constexpr int ay =  3;
-	
-  constexpr int bx = 12;
-  constexpr int by = 37;
-	
-  constexpr int cx = 62;
-  constexpr int cy = 53;
+  //constexpr int ax =  7;
+  //constexpr int ay =  3;
+  //	
+  //constexpr int bx = 12;
+  //constexpr int by = 37;
+  //	
+  //constexpr int cx = 62;
+  //constexpr int cy = 53;
 
-  //lines
-  //draw_line3(ax, ay, bx, by, framebuffer, blue);
-  //draw_line3(bx, by, ax, ay, framebuffer, yellow);
-  //draw_line3(cx, cy, bx, by, framebuffer, green);
-  //draw_line3(ax, ay, cx, cy, framebuffer, red);
-  //draw_line3(cx, cy, ax, ay, framebuffer, yellow);
-  //draw_line3(ax, ay, bx, by, framebuffer, green);
-  
 
-  OBJObject<float> diablo_pose {};
-  read_obj("assets/diablo3_pose.obj", diablo_pose);
   // diablo_pose.printVertices();
   // diablo_pose.printFaces();
 
-  OBJObject<int> triangles{};
-  triangles.vertices.emplace_back(ax, ay, 0); 
-  triangles.vertices.emplace_back(bx, by, 0);
-  triangles.vertices.emplace_back(cx, cy, 0);
-  triangles.faces.emplace_back(1, 2, 3);
-  triangles.printFaces();
-  triangles.printVertices();
+  //OBJObject<int> triangles{};
+  //triangles.vertices.emplace_back(ax, ay, 0); 
+  //triangles.vertices.emplace_back(bx, by, 0);
+  //triangles.vertices.emplace_back(cx, cy, 0);
+  //triangles.faces.emplace_back(1, 2, 3);
+  //triangles.printFaces();
+  //triangles.printVertices();
+  //
+  //draw_triangles(framebuffer, triangles, blue);
+  //
+  //framebuffer.set(ax, ay, white);
+  //framebuffer.set(bx, by, white);
+  //framebuffer.set(cx, cy, white);
 
-  draw_triangles(framebuffer, triangles, blue);
+  // framebuffer.write_tga_file("framebuffer.tga");
 
-  framebuffer.set(ax, ay, white);
-  framebuffer.set(bx, by, white);
-  framebuffer.set(cx, cy, white);
+  OBJObject<float> diablo_pose {};
+  read_obj("assets/diablo3_pose.obj", diablo_pose);
+  diablo_pose.viewport_transform(diablo_fb);
+  diablo_pose.printVertices();
+  draw_triangles(diablo_fb, diablo_pose, red);
   
-	
-  framebuffer.write_tga_file("framebuffer.tga");
+  diablo_fb.write_tga_file("diablo_img.tga");
+  
   return 0;
 }
