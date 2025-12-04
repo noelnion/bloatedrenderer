@@ -11,15 +11,15 @@
 #include <iostream>
 #include <print>
 
+template <typename T>
 class OBJVertex
 {
 public:
-  float x {};
-  float y {};
-  float z {};
+  std::array<T, 3> vertex_coords;
   OBJVertex() = default;
-  OBJVertex(const float x_, const float y_, const float z_) : x(x_), y(y_), z(z_) {}
-  void print() const {std::print("x = {0}, y = {1}, z = {2}\n", x, y, z);}
+  OBJVertex(const T x_, const T y_, const T z_) : vertex_coords({x_, y_, z_}) {};
+
+  void print() const {std::print("x = {0}, y = {1}, z = {2}\n", vertex_coords.at(0), vertex_coords.at(1), vertex_coords.at(2));}
 };
 
 class OBJFaceElements
@@ -36,10 +36,11 @@ public:
   void print() const {std::print("tri1 = {0}, tri2 = {1}, tri3 = {2}\n", face_vertices.at(0), face_vertices.at(1), face_vertices.at(2));}  
 };
 
+template <typename T>
 class OBJObject
 {
 public:
-  std::vector<OBJVertex> vertices;
+  std::vector<OBJVertex<T>> vertices;
   std::vector<OBJFaceElements> faces;
 
   OBJObject() = default;
@@ -56,7 +57,8 @@ public:
   }    
 };
 
-bool read_obj(const std::filesystem::path &obj_file_path, OBJObject& obj_object)
+template <typename T>
+bool read_obj(const std::filesystem::path &obj_file_path, OBJObject<T>& obj_object)
 {
   std::ifstream obj_file_stream(obj_file_path);
   if (!obj_file_stream.is_open()) { return false; }
@@ -72,9 +74,9 @@ bool read_obj(const std::filesystem::path &obj_file_path, OBJObject& obj_object)
 		line_stream.seekg(symbol_end_index);
 	}
 	if ("v"==symbol) {
-	  float x_coord {};
-	  float y_coord {};
-	  float z_coord {};
+	  T x_coord {};
+	  T y_coord {};
+	  T z_coord {};
 	  line_stream >> x_coord >> y_coord >> z_coord;
 	  obj_object.vertices.emplace_back(x_coord,y_coord,z_coord);
 	}
@@ -187,7 +189,7 @@ int main([[maybe_unused]]int argc,[[maybe_unused]] const char** argv){
   framebuffer.set(bx, by, white);
   framebuffer.set(cx, cy, white);
 
-  OBJObject diablo_pose {};
+  OBJObject<float> diablo_pose {};
   read_obj("assets/diablo3_pose.obj", diablo_pose);
   diablo_pose.printVertices();
   diablo_pose.printFaces();
