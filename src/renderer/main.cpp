@@ -17,7 +17,11 @@ class OBJVertex
 public:
   std::array<T, 3> vertex_coords;
   OBJVertex() = default;
-  OBJVertex(const T x_, const T y_, const T z_) : vertex_coords({x_, y_, z_}) {};
+  OBJVertex(const T x_, const T y_, const T z_) : vertex_coords({ x_, y_, z_ }) {};
+
+  [[nodiscard]] T get_x() const { return vertex_coords.at(0); }
+  [[nodiscard]] T get_y() const { return vertex_coords.at(1); }
+  [[nodiscard]] T get_z() const { return vertex_coords.at(2); }  
 
   void print() const {std::print("x = {0}, y = {1}, z = {2}\n", vertex_coords.at(0), vertex_coords.at(1), vertex_coords.at(2));}
 };
@@ -68,7 +72,7 @@ bool read_obj(const std::filesystem::path &obj_file_path, OBJObject<T>& obj_obje
   while (std::getline(obj_file_stream, line, '\n')) {
 	line_stream.clear();
 	line_stream.str(line);
-	size_t symbol_end_index = line.find_first_of(' ');
+	const size_t symbol_end_index = line.find_first_of(' ');
 	if (!(std::string::npos == symbol_end_index)) {
 	    symbol = line.substr(0, symbol_end_index);
 		line_stream.seekg(symbol_end_index);
@@ -154,6 +158,34 @@ void draw_line3(int sx, int sy, int dx,  int dy, TGAImage &img, const TGAColor &
   }
 }
 
+template<typename T> void draw_triangles(TGAImage &img, const OBJObject<T> &obj, const TGAColor &color)
+{
+
+  for (const auto &faces : obj.faces) {
+    auto tri1_index = static_cast<size_t>(faces.face_vertices.at(0) - 1);
+    auto tri2_index = static_cast<size_t>(faces.face_vertices.at(1) - 1);
+    auto tri3_index = static_cast<size_t>(faces.face_vertices.at(2) - 1);
+
+    std::print("drawing indices: {0}, {1}, {2}\n", tri1_index, tri2_index, tri3_index);
+    
+	draw_line3(obj.vertices.at(tri1_index).get_x(),
+					   obj.vertices.at(tri1_index).get_y(),
+					   obj.vertices.at(tri2_index).get_x(),
+			   obj.vertices.at(tri2_index).get_y(),img,color);
+
+	draw_line3(obj.vertices.at(tri2_index).get_x(),
+					   obj.vertices.at(tri2_index).get_y(),
+					   obj.vertices.at(tri3_index).get_x(),
+			   obj.vertices.at(tri3_index).get_y(),img,color);
+
+	draw_line3(obj.vertices.at(tri1_index).get_x(),
+          obj.vertices.at(tri1_index).get_y(),
+          obj.vertices.at(tri3_index).get_x(),
+			   obj.vertices.at(tri3_index).get_y(),img, color);
+		
+    }
+}
+
 int main([[maybe_unused]]int argc,[[maybe_unused]] const char** argv){
 
   const TGAColor white  (255, 255, 255, 255); // attention, BGRA order
@@ -178,21 +210,33 @@ int main([[maybe_unused]]int argc,[[maybe_unused]] const char** argv){
   constexpr int cy = 53;
 
   //lines
-  draw_line3(ax, ay, bx, by, framebuffer, blue);
-  draw_line3(bx, by, ax, ay, framebuffer, yellow);
-  draw_line3(cx, cy, bx, by, framebuffer, green);
-  draw_line3(ax, ay, cx, cy, framebuffer, red);
-  draw_line3(cx, cy, ax, ay, framebuffer, yellow);
-  draw_line3(ax, ay, bx, by, framebuffer, green);
+  //draw_line3(ax, ay, bx, by, framebuffer, blue);
+  //draw_line3(bx, by, ax, ay, framebuffer, yellow);
+  //draw_line3(cx, cy, bx, by, framebuffer, green);
+  //draw_line3(ax, ay, cx, cy, framebuffer, red);
+  //draw_line3(cx, cy, ax, ay, framebuffer, yellow);
+  //draw_line3(ax, ay, bx, by, framebuffer, green);
+  
+
+  OBJObject<float> diablo_pose {};
+  read_obj("assets/diablo3_pose.obj", diablo_pose);
+  // diablo_pose.printVertices();
+  // diablo_pose.printFaces();
+
+  OBJObject<int> triangles{};
+  triangles.vertices.emplace_back(ax, ay, 0); 
+  triangles.vertices.emplace_back(bx, by, 0);
+  triangles.vertices.emplace_back(cx, cy, 0);
+  triangles.faces.emplace_back(1, 2, 3);
+  triangles.printFaces();
+  triangles.printVertices();
+
+  draw_triangles(framebuffer, triangles, blue);
 
   framebuffer.set(ax, ay, white);
   framebuffer.set(bx, by, white);
   framebuffer.set(cx, cy, white);
-
-  OBJObject<float> diablo_pose {};
-  read_obj("assets/diablo3_pose.obj", diablo_pose);
-  diablo_pose.printVertices();
-  diablo_pose.printFaces();
+  
 	
   framebuffer.write_tga_file("framebuffer.tga");
   return 0;
