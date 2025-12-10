@@ -10,6 +10,7 @@
 #include <sstream>
 #include <iostream>
 #include <print>
+#include <cstdlib>
 
 template <typename T>
 class OBJVertex
@@ -74,6 +75,23 @@ public:
 	  
   }
 
+};
+
+template<typename T>
+class Rectangle{
+private:
+  std::array<T, 4> vertices;
+public:
+  Rectangle (T x_min, T x_max, T y_min, T y_max) : vertices({x_min, x_max, y_min, y_max}) {}
+  [[nodiscard]] T& get_xmin() {return vertices.at(0);}
+  [[nodiscard]] T& get_xmax() {return vertices.at(1);}
+  [[nodiscard]] T& get_ymin() {return vertices.at(2);}  
+  [[nodiscard]] T& get_ymax() {return vertices.at(3);}
+
+  [[nodiscard]] T& get_xmin() const {return vertices.at(0);}
+  [[nodiscard]] T& get_xmax() const {return vertices.at(1);}
+  [[nodiscard]] T& get_ymin() const {return vertices.at(2);}  
+  [[nodiscard]] T& get_ymax() const {return vertices.at(3);}
 };
 
 template <typename T>
@@ -148,7 +166,7 @@ void draw_line3(int sx, int sy, int dx,  int dy, TGAImage &img, const TGAColor &
   bool switched = false;
   const auto slope = static_cast<float>(dy - sy) / static_cast<float>(dx - sx);
   
-  if(std::abs(slope) > 1){
+  if(std::abs(slope) > 1.0F){
 	std::swap(sx, sy);
 	std::swap(dx, dy);
 	switched = true;
@@ -159,12 +177,10 @@ void draw_line3(int sx, int sy, int dx,  int dy, TGAImage &img, const TGAColor &
     std::swap(sy, dy);
   }
   
-  const int x_min = std::min(sx, dx);
-  const int x_max = std::max(sx, dx);
-
-  for (int x_t = x_min; x_t <= x_max; x_t++) {
-    const auto t_param = static_cast<float>(x_t - sx) / static_cast<float>(dx - sx);
-    const int y_to_draw = sy + static_cast<int>(t_param * static_cast<float>(dy - sy));
+  for (int x_t = sx; x_t <= dx; x_t++) {
+    const float t_param = static_cast<float>(x_t - sx) / static_cast<float>(dx - sx);
+	const float dy_to_draw = std::round(t_param * static_cast<float>(dy - sy));
+    const int y_to_draw = sy + static_cast<int>(dy_to_draw);
     if (switched) {
       img.set(y_to_draw, x_t, color);
     } else {
@@ -184,20 +200,77 @@ template<typename T> void draw_triangles(TGAImage &img, const OBJObject<T> &obj,
     std::print("drawing indices: {0}, {1}, {2}\n", tri1_index, tri2_index, tri3_index);
     
 	draw_line3(obj.vertices.at(tri1_index).get_x(),
-					   obj.vertices.at(tri1_index).get_y(),
-					   obj.vertices.at(tri2_index).get_x(),
+			   obj.vertices.at(tri1_index).get_y(),
+			   obj.vertices.at(tri2_index).get_x(),
 			   obj.vertices.at(tri2_index).get_y(),img,color);
 
 	draw_line3(obj.vertices.at(tri2_index).get_x(),
-					   obj.vertices.at(tri2_index).get_y(),
-					   obj.vertices.at(tri3_index).get_x(),
+			   obj.vertices.at(tri2_index).get_y(),
+			   obj.vertices.at(tri3_index).get_x(),
 			   obj.vertices.at(tri3_index).get_y(),img,color);
 
 	draw_line3(obj.vertices.at(tri1_index).get_x(),
-          obj.vertices.at(tri1_index).get_y(),
-          obj.vertices.at(tri3_index).get_x(),
+			   obj.vertices.at(tri1_index).get_y(),
+			   obj.vertices.at(tri3_index).get_x(),
 			   obj.vertices.at(tri3_index).get_y(),img, color);
 		
+  }
+}
+
+void draw_triangle(const int ax,
+  const int ay,
+  const int bx,
+  const int by,
+  const int cx,
+  const int cy,
+  TGAImage &img,
+  const TGAColor &clr)
+{
+  draw_line3(ax, ay, bx, by, img, clr);
+  draw_line3(ax, ay, cx, cy, img, clr);
+  draw_line3(cx, cy, bx, by, img, clr);
+}
+
+
+
+float s_triangle_area(const int ax, const int ay, const int bx, const int by, const int cx, const int cy)
+{
+  // equation for triangle area with vertex coordinates
+  return 0.5F * static_cast<float>(((ax - cx)*(by - ay)) - ((ax - bx)*(cy - ay)));
+}
+
+template<typename T>
+Rectangle<T> get_bounding_box(int ax, int ay, int bx, int by, int cx, int cy){
+  T x_min = std::min({ax, bx, cx});
+  T y_min = std::min({ay, by, cy});
+  T x_max = std::max({ax, bx, cx});
+  T y_max = std::max({ay, by, cy});  
+  return Rectangle(x_min, x_max, y_min, y_max);
+}
+
+void fill_triangle(const int ax,
+  const int ay,
+  const int bx,
+  const int by,
+  const int cx,
+  const int cy,
+  TGAImage &img,
+  const TGAColor &clr)
+{
+  float sarea_total = s_triangle_area(ax, ay, bx, by, cx, cy);
+  Rectangle<int> bounding_box = get_bounding_box<int>(ax, ay, bx, by, cx, cy);
+  for (int i = bounding_box.get_xmin(); i <= bounding_box.get_xmax(); ++i) {
+    for (int j = bounding_box.get_ymin(); j <= bounding_box.get_ymax(); ++j) {
+      // img.set(i,j,clr);
+	  /// TODO: clean dis shi up
+      float sareaPBC = s_triangle_area(i, j, bx, by, cx, cy);
+      float sareaAPC = s_triangle_area(ax, ay, i, j, cx, cy);
+      float sareaABP = s_triangle_area(ax, ay, bx, by, i, j);
+      float lam1 = sareaPBC / sarea_total;
+      float lam2 = sareaAPC / sarea_total;
+      float lam3 = sareaABP / sarea_total;
+	  if(lam1 > 0.0F && lam2 > 0.0F && lam3 > 0.0F) {img.set(i,j,clr);}
+      }
     }
 }
 
@@ -209,11 +282,25 @@ int main([[maybe_unused]]int argc,[[maybe_unused]] const char** argv){
   const TGAColor blue   (255, 128,  64, 255);
   const TGAColor yellow (  0, 200, 255, 255);
  
-  constexpr int width  = 64;
-  constexpr int height = 64;
+  constexpr int width  = 128;
+  constexpr int height = 128;
   TGAImage framebuffer(width, height, TGAImage::RGB);
-  TGAImage diablo_fb(800, 800, TGAImage::RGB);  
+  TGAImage diablo_fb(800, 800, TGAImage::RGB);
 
+  OBJObject<int> triangle_filling;
+  draw_triangle(  7, 45, 35, 100, 45,  60, framebuffer, red);
+  draw_triangle(120, 35, 90,   5, 45, 110, framebuffer, white);
+  draw_triangle(115, 83, 80, 90, 85, 120, framebuffer, green);
+
+
+  draw_line3(45, 110, 120, 35, framebuffer, yellow);
+  framebuffer.write_tga_file("triangles.tga");
+
+  fill_triangle(  7, 45, 35, 100, 45,  60, framebuffer, red);
+  fill_triangle(120, 35, 90,   5, 45, 110, framebuffer, white);
+  fill_triangle(115, 83, 80, 90, 85, 120, framebuffer, green);
+
+  framebuffer.write_tga_file("filled_triangles.tga");  
 
   //points
   //constexpr int ax =  7;
@@ -224,34 +311,32 @@ int main([[maybe_unused]]int argc,[[maybe_unused]] const char** argv){
   //	
   //constexpr int cx = 62;
   //constexpr int cy = 53;
-
-
-  // diablo_pose.printVertices();
-  // diablo_pose.printFaces();
-
+  //
+  //
   //OBJObject<int> triangles{};
   //triangles.vertices.emplace_back(ax, ay, 0); 
   //triangles.vertices.emplace_back(bx, by, 0);
   //triangles.vertices.emplace_back(cx, cy, 0);
   //triangles.faces.emplace_back(1, 2, 3);
-  //triangles.printFaces();
-  //triangles.printVertices();
   //
   //draw_triangles(framebuffer, triangles, blue);
+  //fill_triangles(framebuffer, triangles, green);
   //
   //framebuffer.set(ax, ay, white);
   //framebuffer.set(bx, by, white);
   //framebuffer.set(cx, cy, white);
+  //
+  //framebuffer.write_tga_file("filling_test.tga");
 
-  // framebuffer.write_tga_file("framebuffer.tga");
 
-  OBJObject<float> diablo_pose {};
-  read_obj("assets/diablo3_pose.obj", diablo_pose);
-  diablo_pose.viewport_transform(diablo_fb);
-  diablo_pose.printVertices();
-  draw_triangles(diablo_fb, diablo_pose, red);
+  //OBJObject<float> diablo_pose {};
+  //read_obj("assets/diablo3_pose.obj", diablo_pose);
+  //diablo_pose.viewport_transform(diablo_fb);
+  //diablo_pose.printVertices();
+  //draw_triangles(diablo_fb, diablo_pose, red);
+  //fill_triangles(diablo_fb, diablo_pose, blue);
   
-  diablo_fb.write_tga_file("diablo_img.tga");
+  //diablo_fb.write_tga_file("diablo_img.tga");
   
   return 0;
 }
