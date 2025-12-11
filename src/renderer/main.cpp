@@ -2,6 +2,7 @@
 //#include "objreader.hpp"
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
 #include <filesystem>
 #include <fstream>
 #include <array>
@@ -197,22 +198,37 @@ template<typename T> void draw_triangles(TGAImage &img, const OBJObject<T> &obj,
     auto tri2_index = static_cast<size_t>(faces.face_vertices.at(1) - 1);
     auto tri3_index = static_cast<size_t>(faces.face_vertices.at(2) - 1);
 
-    std::print("drawing indices: {0}, {1}, {2}\n", tri1_index, tri2_index, tri3_index);
+    auto rand_r = static_cast<uint8_t>(std::rand() % UINT8_MAX);
+    auto rand_g = static_cast<uint8_t>(std::rand() % UINT8_MAX);
+    auto rand_b = static_cast<uint8_t>(std::rand() % UINT8_MAX);
     
-	draw_line3(obj.vertices.at(tri1_index).get_x(),
-			   obj.vertices.at(tri1_index).get_y(),
-			   obj.vertices.at(tri2_index).get_x(),
-			   obj.vertices.at(tri2_index).get_y(),img,color);
+	TGAColor rndColor(rand_r, rand_g, rand_b, 255);
 
-	draw_line3(obj.vertices.at(tri2_index).get_x(),
-			   obj.vertices.at(tri2_index).get_y(),
-			   obj.vertices.at(tri3_index).get_x(),
-			   obj.vertices.at(tri3_index).get_y(),img,color);
+    fill_triangle(obj.vertices.at(tri1_index).get_x(),
+				  obj.vertices.at(tri1_index).get_y(),
+				  obj.vertices.at(tri2_index).get_x(),
+				  obj.vertices.at(tri2_index).get_y(),
+				  obj.vertices.at(tri3_index).get_x(),
+				  obj.vertices.at(tri3_index).get_y(),
+				  img,
+				  color      );
 
-	draw_line3(obj.vertices.at(tri1_index).get_x(),
-			   obj.vertices.at(tri1_index).get_y(),
-			   obj.vertices.at(tri3_index).get_x(),
-			   obj.vertices.at(tri3_index).get_y(),img, color);
+    //std::print("drawing indices: {0}, {1}, {2}\n", tri1_index, tri2_index, tri3_index);
+    
+	//draw_line3(obj.vertices.at(tri1_index).get_x(),
+	//		   obj.vertices.at(tri1_index).get_y(),
+	//		   obj.vertices.at(tri2_index).get_x(),
+	//		   obj.vertices.at(tri2_index).get_y(),img,color);
+	//
+	//draw_line3(obj.vertices.at(tri2_index).get_x(),
+	//		   obj.vertices.at(tri2_index).get_y(),
+	//		   obj.vertices.at(tri3_index).get_x(),
+	//		   obj.vertices.at(tri3_index).get_y(),img,color);
+	//
+	//draw_line3(obj.vertices.at(tri1_index).get_x(),
+	//		   obj.vertices.at(tri1_index).get_y(),
+	//		   obj.vertices.at(tri3_index).get_x(),
+	//		   obj.vertices.at(tri3_index).get_y(),img, color);
 		
   }
 }
@@ -248,14 +264,16 @@ Rectangle<T> get_bounding_box(int ax, int ay, int bx, int by, int cx, int cy){
   return Rectangle(x_min, x_max, y_min, y_max);
 }
 
-void fill_triangle(const int ax,
-  const int ay,
-  const int bx,
-  const int by,
-  const int cx,
-  const int cy,
-  TGAImage &img,
-  const TGAColor &clr)
+void fill_triangle_shader(const int ax,
+				   const int ay,
+				   const int az,
+				   const int bx,
+				   const int by,
+				   const int bz,
+				   const int cx,
+				   const int cy,
+				   const int cz,
+				   TGAImage &img)
 {
   float sarea_total = s_triangle_area(ax, ay, bx, by, cx, cy);
   Rectangle<int> bounding_box = get_bounding_box<int>(ax, ay, bx, by, cx, cy);
@@ -269,9 +287,43 @@ void fill_triangle(const int ax,
       float lam1 = sareaPBC / sarea_total;
       float lam2 = sareaAPC / sarea_total;
       float lam3 = sareaABP / sarea_total;
-	  if(lam1 > 0.0F && lam2 > 0.0F && lam3 > 0.0F) {img.set(i,j,clr);}
-      }
-    }
+	  if(lam1 >= 0.0F && lam2 >= 0.0F && lam3 >= 0.0F) {
+		uint8_t red_value = lam1 * 255;
+		uint8_t blue_value = lam2 * 255;
+		uint8_t green_value = lam3 * 255;
+		TGAColor shade(red_value, blue_value, green_value, 255);
+		img.set(i,j,shade);
+	  }
+	}
+  }
+}
+
+void fill_triangle(const int ax,
+				   const int ay,
+				   const int bx,
+				   const int by,
+				   const int cx,
+				   const int cy,
+				   TGAImage &img,
+				   const TGAColor &clr)
+{
+  float sarea_total = s_triangle_area(ax, ay, bx, by, cx, cy);
+  Rectangle<int> bounding_box = get_bounding_box<int>(ax, ay, bx, by, cx, cy);
+  for (int i = bounding_box.get_xmin(); i <= bounding_box.get_xmax(); ++i) {
+    for (int j = bounding_box.get_ymin(); j <= bounding_box.get_ymax(); ++j) {
+      // img.set(i,j,clr);
+	  /// TODO: clean dis shi up
+      float sareaPBC = s_triangle_area(i, j, bx, by, cx, cy);
+      float sareaAPC = s_triangle_area(ax, ay, i, j, cx, cy);
+      float sareaABP = s_triangle_area(ax, ay, bx, by, i, j);
+      float lam1 = sareaPBC / sarea_total;
+      float lam2 = sareaAPC / sarea_total;
+      float lam3 = sareaABP / sarea_total;
+	  if(lam1 >= 0.0F && lam2 >= 0.0F && lam3 >= 0.0F) {
+		img.set(i,j,clr);
+	  }
+	}
+  }
 }
 
 int main([[maybe_unused]]int argc,[[maybe_unused]] const char** argv){
@@ -282,25 +334,36 @@ int main([[maybe_unused]]int argc,[[maybe_unused]] const char** argv){
   const TGAColor blue   (255, 128,  64, 255);
   const TGAColor yellow (  0, 200, 255, 255);
  
-  constexpr int width  = 128;
-  constexpr int height = 128;
+  constexpr int width  = 64;
+  constexpr int height = 64;
   TGAImage framebuffer(width, height, TGAImage::RGB);
   TGAImage diablo_fb(800, 800, TGAImage::RGB);
 
-  OBJObject<int> triangle_filling;
-  draw_triangle(  7, 45, 35, 100, 45,  60, framebuffer, red);
-  draw_triangle(120, 35, 90,   5, 45, 110, framebuffer, white);
-  draw_triangle(115, 83, 80, 90, 85, 120, framebuffer, green);
+  constexpr int ax = 17, ay =  4, az =  255;
+  constexpr int bx = 55, by = 39, bz = 255;
+  constexpr int cx = 23, cy = 59, cz = 255;
 
+  fill_triangle_shader(ax, ay, az,
+				bx, by, bz,
+				cx, cy, cz,
+				framebuffer);
 
-  draw_line3(45, 110, 120, 35, framebuffer, yellow);
-  framebuffer.write_tga_file("triangles.tga");
+  framebuffer.write_tga_file("shaded_triangle.tga");
 
-  fill_triangle(  7, 45, 35, 100, 45,  60, framebuffer, red);
-  fill_triangle(120, 35, 90,   5, 45, 110, framebuffer, white);
-  fill_triangle(115, 83, 80, 90, 85, 120, framebuffer, green);
+  //OBJObject<int> triangle_filling;
+  //draw_triangle(  7, 45, 35, 100, 45,  60, framebuffer, red);
+  //draw_triangle(120, 35, 90,   5, 45, 110, framebuffer, white);
+  //draw_triangle(115, 83, 80, 90, 85, 120, framebuffer, green);
+  //
+  //
+  //draw_line3(45, 110, 120, 35, framebuffer, yellow);
+  //framebuffer.write_tga_file("triangles.tga");
 
-  framebuffer.write_tga_file("filled_triangles.tga");  
+  //fill_triangle(  7, 45, 35, 100, 45,  60, framebuffer, red);
+  //fill_triangle(120, 35, 90,   5, 45, 110, framebuffer, white);
+  //fill_triangle(115, 83, 80, 90, 85, 120, framebuffer, green);
+  //
+  //framebuffer.write_tga_file("filled_triangles.tga");  
 
   //points
   //constexpr int ax =  7;
@@ -335,8 +398,10 @@ int main([[maybe_unused]]int argc,[[maybe_unused]] const char** argv){
   //diablo_pose.printVertices();
   //draw_triangles(diablo_fb, diablo_pose, red);
   //fill_triangles(diablo_fb, diablo_pose, blue);
-  
+  //
   //diablo_fb.write_tga_file("diablo_img.tga");
+
+  
   
   return 0;
 }
