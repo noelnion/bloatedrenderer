@@ -1,4 +1,4 @@
-add_executable(intro main.cpp tgaimage.hpp tgaimage.cpp)
+add_executable(intro main.cpp tgaimage.hpp tgaimage.cpp math.cpp)
 
 target_link_libraries(
   intro

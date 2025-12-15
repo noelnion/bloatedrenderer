@@ -1,5 +1,7 @@
 #include "tgaimage.hpp"
+#include "math.hpp"
 //#include "objreader.hpp"
+
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
@@ -12,6 +14,8 @@
 #include <iostream>
 #include <print>
 #include <cstdlib>
+#include <random>
+#include <limits>
 
 template <typename T>
 class OBJVertex
@@ -62,16 +66,18 @@ public:
     for (const auto &face : faces) { face.print(); }
   }
 
-  void viewport_transform(TGAImage &img)
+  void viewport_transform(const TGAImage &img)
   {
     const int half_height = img.height() / 2;
 	const int half_width =  img.width()  / 2;
+	const float half_z = static_cast<float>(UINT8_MAX) / 2;
 	for (auto &vert : vertices) {
 	   auto current_x = vert.get_x();
 	   auto current_y = vert.get_y();
+	   auto current_z = static_cast<float>(vert.get_z());
 	   vert.vertex_coords.at(0) = (current_x + static_cast<T>(1)) * half_width;
 	   vert.vertex_coords.at(1) = (current_y + static_cast<T>(1)) * half_height;
-	   vert.vertex_coords.at(2) = 0;
+	   vert.vertex_coords.at(2) = std::round((current_z + 1.0F) * half_z);
 	}
 	  
   }
@@ -190,28 +196,30 @@ void draw_line3(int sx, int sy, int dx,  int dy, TGAImage &img, const TGAColor &
   }
 }
 
-template<typename T> void draw_triangles(TGAImage &img, const OBJObject<T> &obj, const TGAColor &color)
+template<typename T> void draw_triangles(TGAImage &img, const OBJObject<T> &obj, const TGAColor &color, TGAImage& zbuffer)
 {
 
+  std::random_device rand_colors_distribution("default");
+  
   for (const auto &faces : obj.faces) {
     auto tri1_index = static_cast<size_t>(faces.face_vertices.at(0) - 1);
     auto tri2_index = static_cast<size_t>(faces.face_vertices.at(1) - 1);
     auto tri3_index = static_cast<size_t>(faces.face_vertices.at(2) - 1);
+	
 
-    auto rand_r = static_cast<uint8_t>(std::rand() % UINT8_MAX);
-    auto rand_g = static_cast<uint8_t>(std::rand() % UINT8_MAX);
-    auto rand_b = static_cast<uint8_t>(std::rand() % UINT8_MAX);
-    
-	TGAColor rndColor(rand_r, rand_g, rand_b, 255);
-
-    fill_triangle(obj.vertices.at(tri1_index).get_x(),
-				  obj.vertices.at(tri1_index).get_y(),
-				  obj.vertices.at(tri2_index).get_x(),
-				  obj.vertices.at(tri2_index).get_y(),
-				  obj.vertices.at(tri3_index).get_x(),
-				  obj.vertices.at(tri3_index).get_y(),
-				  img,
-				  color      );
+    fill_triangle_zbuffer(obj.vertices.at(tri1_index).get_x(),
+						  obj.vertices.at(tri1_index).get_y(),
+						  obj.vertices.at(tri1_index).get_z(),
+						  obj.vertices.at(tri2_index).get_x(),
+						  obj.vertices.at(tri2_index).get_y(),
+						  obj.vertices.at(tri2_index).get_z(),						  
+						  obj.vertices.at(tri3_index).get_x(),
+						  obj.vertices.at(tri3_index).get_y(),
+						  obj.vertices.at(tri3_index).get_z(),						  
+						  img,
+						  zbuffer,
+						  rand_colors_distribution
+						  );
 
     //std::print("drawing indices: {0}, {1}, {2}\n", tri1_index, tri2_index, tri3_index);
     
@@ -313,14 +321,66 @@ void fill_triangle(const int ax,
     for (int j = bounding_box.get_ymin(); j <= bounding_box.get_ymax(); ++j) {
       // img.set(i,j,clr);
 	  /// TODO: clean dis shi up
+	  auto rand_r = static_cast<uint8_t>(std::rand() % UINT8_MAX);
+	  auto rand_g = static_cast<uint8_t>(std::rand() % UINT8_MAX);
+	  auto rand_b = static_cast<uint8_t>(std::rand() % UINT8_MAX);
+    
+	  TGAColor rndColor(rand_r, rand_g, rand_b, 255);
+	  
       float sareaPBC = s_triangle_area(i, j, bx, by, cx, cy);
       float sareaAPC = s_triangle_area(ax, ay, i, j, cx, cy);
       float sareaABP = s_triangle_area(ax, ay, bx, by, i, j);
       float lam1 = sareaPBC / sarea_total;
       float lam2 = sareaAPC / sarea_total;
       float lam3 = sareaABP / sarea_total;
+	  
 	  if(lam1 >= 0.0F && lam2 >= 0.0F && lam3 >= 0.0F) {
-		img.set(i,j,clr);
+		img.set(i,j,rndColor);
+	  }
+	}
+  }
+}
+
+void fill_triangle_zbuffer(const int ax,
+						   const int ay,
+						   const int az,
+						   const int bx,
+						   const int by,
+						   const int bz,
+						   const int cx,
+						   const int cy,
+						   const int cz,
+						   TGAImage &img,
+						   TGAImage &zbuffer,
+						   std::random_device &ran_dev)
+{
+
+  auto rand_r = ran_dev() % UINT8_MAX;
+  auto rand_g = ran_dev() % UINT8_MAX;
+  auto rand_b = ran_dev() % UINT8_MAX;
+    
+  TGAColor rndColor(rand_r, rand_g, rand_b, UINT8_MAX);
+  
+  float sarea_total = s_triangle_area(ax, ay, bx, by, cx, cy);
+  
+  Rectangle<int> bounding_box = get_bounding_box<int>(ax, ay, bx, by, cx, cy);
+  for (int i = bounding_box.get_xmin(); i <= bounding_box.get_xmax(); ++i) {
+    for (int j = bounding_box.get_ymin(); j <= bounding_box.get_ymax(); ++j) {
+	  /// TODO: clean dis shi up
+      float sareaPBC = s_triangle_area(i, j, bx, by, cx, cy);
+      float sareaAPC = s_triangle_area(ax, ay, i, j, cx, cy);
+      float sareaABP = s_triangle_area(ax, ay, bx, by, i, j);
+      float lam1 = sareaPBC / sarea_total;
+      float lam2 = sareaAPC / sarea_total;
+      float lam3 = sareaABP / sarea_total;
+	  auto z_val = static_cast<uint8_t>((lam1 * az) + (lam2 * bz) + (lam3 * cz));
+	  //uint8_t z_val = std::round((az + bz + cz) / 3);
+	  TGAColor z_color(z_val, z_val, z_val, UINT8_MAX);      
+	  if(lam1 >= 0.0F && lam2 >= 0.0F && lam3 >= 0.0F) {
+		if(zbuffer.get(i,j)[0] < z_val){
+		  zbuffer.set(i, j, z_color);
+		  img.set(i, j, rndColor);
+		}
 	  }
 	}
   }
@@ -337,7 +397,9 @@ int main([[maybe_unused]]int argc,[[maybe_unused]] const char** argv){
   constexpr int width  = 64;
   constexpr int height = 64;
   TGAImage framebuffer(width, height, TGAImage::RGB);
+  TGAImage framebuffer_z(width, height, TGAImage::GRAYSCALE);
   TGAImage diablo_fb(800, 800, TGAImage::RGB);
+  TGAImage diablo_fb_z(800, 800, TGAImage::GRAYSCALE);  
 
   constexpr int ax = 17, ay =  4, az =  255;
   constexpr int bx = 55, by = 39, bz = 255;
@@ -348,7 +410,7 @@ int main([[maybe_unused]]int argc,[[maybe_unused]] const char** argv){
 				cx, cy, cz,
 				framebuffer);
 
-  framebuffer.write_tga_file("shaded_triangle.tga");
+  //framebuffer.write_tga_file("shaded_triangle.tga");
 
   //OBJObject<int> triangle_filling;
   //draw_triangle(  7, 45, 35, 100, 45,  60, framebuffer, red);
@@ -392,16 +454,38 @@ int main([[maybe_unused]]int argc,[[maybe_unused]] const char** argv){
   //framebuffer.write_tga_file("filling_test.tga");
 
 
-  //OBJObject<float> diablo_pose {};
-  //read_obj("assets/diablo3_pose.obj", diablo_pose);
-  //diablo_pose.viewport_transform(diablo_fb);
-  //diablo_pose.printVertices();
-  //draw_triangles(diablo_fb, diablo_pose, red);
-  //fill_triangles(diablo_fb, diablo_pose, blue);
-  //
-  //diablo_fb.write_tga_file("diablo_img.tga");
+  OBJObject<float> diablo_pose {};
+  read_obj("assets/diablo3_pose.obj", diablo_pose);
+  diablo_pose.viewport_transform(diablo_fb);
+  diablo_pose.printVertices();
+  draw_triangles(diablo_fb, diablo_pose, red, diablo_fb_z);
 
+  diablo_fb.write_tga_file("diablo_img.tga");
+  diablo_fb_z.write_tga_file("diablo_img_z.tga");
+
+  Vec2<float> vec1(1.0F,2.0F);
+  Vec2<float> vec2(3.0F,4.0F);
+  float result = vec1&vec2;
+  std::cout << result << std::endl;
+
+  Matrix<int, 2, 2> TwoByTwo {1,2,3,4};
+  Matrix<int, 2, 2> OtherTwoByTwo {5,6,7,8};
   
+  std::cout << "matrix1:\n";
+  TwoByTwo.print();
+  
+  std::cout << "matrix2:\n";
+  OtherTwoByTwo.print();
+  std::cout << std::endl;
+  
+  Matrix<int, 2,2> matrix_sum = TwoByTwo + OtherTwoByTwo;
+  std::cout << "result:\n";
+  matrix_sum.print();
+
+  std::cout << std::endl;
+  Matrix<int, 4, 4> three_matrix {0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15};
+  three_matrix.Tr();
+  three_matrix.print();
   
   return 0;
 }

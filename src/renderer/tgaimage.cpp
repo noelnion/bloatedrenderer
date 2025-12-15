@@ -39,6 +39,7 @@ TGAColor::TGAColor(std::uint8_t blue, std::uint8_t green, std::uint8_t red, std:
 
 }
 
+
 bool TGAImage::read_tga_file(const std::string& filename) {
     std::ifstream instream;
     instream.open(filename, std::ios::binary);
