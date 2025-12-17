@@ -2,6 +2,7 @@
 #include "math.hpp"
 //#include "objreader.hpp"
 
+#include <numbers>
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
@@ -82,6 +83,9 @@ public:
 	  
   }
 
+
+
+
 };
 
 template<typename T>
@@ -100,6 +104,15 @@ public:
   [[nodiscard]] T& get_ymin() const {return vertices.at(2);}  
   [[nodiscard]] T& get_ymax() const {return vertices.at(3);}
 };
+
+template <typename T>
+Vec3<T> rotate(Vec3<T> &vec_to_rotate){
+  float a = std::numbers::pi_v<float>/6;
+  Matrix<T, 3,3> Ry({std::cos(a), 0, std::sin(a),
+	                           0,       1,      0,
+				    		-std::sin(a), 0, std::cos(a)});
+  return Ry*vec_to_rotate;
+}
 
 template <typename T>
 bool read_obj(const std::filesystem::path &obj_file_path, OBJObject<T>& obj_object)
@@ -142,6 +155,23 @@ bool read_obj(const std::filesystem::path &obj_file_path, OBJObject<T>& obj_obje
   }    
   obj_file_stream.close();
   return true;
+}
+
+Vec3<float> viewport_transform(const Vec3<float> &vec_to_viewport_transform, const TGAImage &img)
+{
+  const int half_height = img.height() / 2;
+  const int half_width =  img.width()  / 2;
+  const float half_z = static_cast<float>(UINT8_MAX) / 2;
+  float x_updated = (vec_to_viewport_transform.x() + static_cast<float>(1)) * half_width;
+  float y_updated = (vec_to_viewport_transform.y() + static_cast<float>(1)) * half_height;
+  float z_updated = std::round((vec_to_viewport_transform.z() + 1.0F) * half_z);
+  return Vec3(x_updated, y_updated, z_updated);
+}
+
+Vec3<float> central_projection_transform(const Vec3<float> &vec_to_viewport_transform) {
+  constexpr float camera_dist = 2.5F;
+  auto z_coord = static_cast<float>(vec_to_viewport_transform.z());
+  return vec_to_viewport_transform * (1.0F / (1.0F - (z_coord/camera_dist)));
 }
 
 void draw_line1(const int sx,const int sy,const int dx, const int dy, TGAImage &img, const TGAColor &color, const float step = 0.001F)
@@ -205,38 +235,48 @@ template<typename T> void draw_triangles(TGAImage &img, const OBJObject<T> &obj,
     auto tri1_index = static_cast<size_t>(faces.face_vertices.at(0) - 1);
     auto tri2_index = static_cast<size_t>(faces.face_vertices.at(1) - 1);
     auto tri3_index = static_cast<size_t>(faces.face_vertices.at(2) - 1);
-	
 
-    fill_triangle_zbuffer(obj.vertices.at(tri1_index).get_x(),
-						  obj.vertices.at(tri1_index).get_y(),
-						  obj.vertices.at(tri1_index).get_z(),
-						  obj.vertices.at(tri2_index).get_x(),
-						  obj.vertices.at(tri2_index).get_y(),
-						  obj.vertices.at(tri2_index).get_z(),						  
-						  obj.vertices.at(tri3_index).get_x(),
-						  obj.vertices.at(tri3_index).get_y(),
-						  obj.vertices.at(tri3_index).get_z(),						  
+	Vec3<float> tri1(obj.vertices.at(tri1_index).get_x(),
+				   obj.vertices.at(tri1_index).get_y(),
+				   obj.vertices.at(tri1_index).get_z());
+
+	Vec3<float> tri2(obj.vertices.at(tri2_index).get_x(),
+				   obj.vertices.at(tri2_index).get_y(),
+				   obj.vertices.at(tri2_index).get_z());
+
+	Vec3<float> tri3(obj.vertices.at(tri3_index).get_x(),
+				   obj.vertices.at(tri3_index).get_y(),
+				   obj.vertices.at(tri3_index).get_z());
+
+	///TODO:
+	// took this step by step, need to clean it up
+	
+	auto tri1_r = rotate(tri1);
+	auto tri2_r = rotate(tri2);
+	auto tri3_r = rotate(tri3);
+
+	auto tri1_rp = central_projection_transform(tri1_r);
+	auto tri2_rp = central_projection_transform(tri2_r);
+	auto tri3_rp = central_projection_transform(tri3_r);
+
+	
+	auto tri1_rt = viewport_transform(tri1_rp, img);
+	auto tri2_rt = viewport_transform(tri2_rp, img);
+	auto tri3_rt = viewport_transform(tri3_rp, img);
+
+    fill_triangle_zbuffer(std::round(tri1_rt.x()),
+						  std::round(tri1_rt.y()),
+						  std::round(tri1_rt.z()),
+						  std::round(tri2_rt.x()),
+						  std::round(tri2_rt.y()),
+						  std::round(tri2_rt.z()),
+						  std::round(tri3_rt.x()),
+						  std::round(tri3_rt.y()),
+						  std::round(tri3_rt.z()),						  
 						  img,
 						  zbuffer,
 						  rand_colors_distribution
 						  );
-
-    //std::print("drawing indices: {0}, {1}, {2}\n", tri1_index, tri2_index, tri3_index);
-    
-	//draw_line3(obj.vertices.at(tri1_index).get_x(),
-	//		   obj.vertices.at(tri1_index).get_y(),
-	//		   obj.vertices.at(tri2_index).get_x(),
-	//		   obj.vertices.at(tri2_index).get_y(),img,color);
-	//
-	//draw_line3(obj.vertices.at(tri2_index).get_x(),
-	//		   obj.vertices.at(tri2_index).get_y(),
-	//		   obj.vertices.at(tri3_index).get_x(),
-	//		   obj.vertices.at(tri3_index).get_y(),img,color);
-	//
-	//draw_line3(obj.vertices.at(tri1_index).get_x(),
-	//		   obj.vertices.at(tri1_index).get_y(),
-	//		   obj.vertices.at(tri3_index).get_x(),
-	//		   obj.vertices.at(tri3_index).get_y(),img, color);
 		
   }
 }
@@ -399,93 +439,16 @@ int main([[maybe_unused]]int argc,[[maybe_unused]] const char** argv){
   TGAImage framebuffer(width, height, TGAImage::RGB);
   TGAImage framebuffer_z(width, height, TGAImage::GRAYSCALE);
   TGAImage diablo_fb(800, 800, TGAImage::RGB);
-  TGAImage diablo_fb_z(800, 800, TGAImage::GRAYSCALE);  
-
-  constexpr int ax = 17, ay =  4, az =  255;
-  constexpr int bx = 55, by = 39, bz = 255;
-  constexpr int cx = 23, cy = 59, cz = 255;
-
-  fill_triangle_shader(ax, ay, az,
-				bx, by, bz,
-				cx, cy, cz,
-				framebuffer);
-
-  //framebuffer.write_tga_file("shaded_triangle.tga");
-
-  //OBJObject<int> triangle_filling;
-  //draw_triangle(  7, 45, 35, 100, 45,  60, framebuffer, red);
-  //draw_triangle(120, 35, 90,   5, 45, 110, framebuffer, white);
-  //draw_triangle(115, 83, 80, 90, 85, 120, framebuffer, green);
-  //
-  //
-  //draw_line3(45, 110, 120, 35, framebuffer, yellow);
-  //framebuffer.write_tga_file("triangles.tga");
-
-  //fill_triangle(  7, 45, 35, 100, 45,  60, framebuffer, red);
-  //fill_triangle(120, 35, 90,   5, 45, 110, framebuffer, white);
-  //fill_triangle(115, 83, 80, 90, 85, 120, framebuffer, green);
-  //
-  //framebuffer.write_tga_file("filled_triangles.tga");  
-
-  //points
-  //constexpr int ax =  7;
-  //constexpr int ay =  3;
-  //	
-  //constexpr int bx = 12;
-  //constexpr int by = 37;
-  //	
-  //constexpr int cx = 62;
-  //constexpr int cy = 53;
-  //
-  //
-  //OBJObject<int> triangles{};
-  //triangles.vertices.emplace_back(ax, ay, 0); 
-  //triangles.vertices.emplace_back(bx, by, 0);
-  //triangles.vertices.emplace_back(cx, cy, 0);
-  //triangles.faces.emplace_back(1, 2, 3);
-  //
-  //draw_triangles(framebuffer, triangles, blue);
-  //fill_triangles(framebuffer, triangles, green);
-  //
-  //framebuffer.set(ax, ay, white);
-  //framebuffer.set(bx, by, white);
-  //framebuffer.set(cx, cy, white);
-  //
-  //framebuffer.write_tga_file("filling_test.tga");
-
-
-  OBJObject<float> diablo_pose {};
-  read_obj("assets/diablo3_pose.obj", diablo_pose);
-  diablo_pose.viewport_transform(diablo_fb);
-  diablo_pose.printVertices();
-  draw_triangles(diablo_fb, diablo_pose, red, diablo_fb_z);
-
-  diablo_fb.write_tga_file("diablo_img.tga");
-  diablo_fb_z.write_tga_file("diablo_img_z.tga");
-
-  Vec2<float> vec1(1.0F,2.0F);
-  Vec2<float> vec2(3.0F,4.0F);
-  float result = vec1&vec2;
-  std::cout << result << std::endl;
-
-  Matrix<int, 2, 2> TwoByTwo {1,2,3,4};
-  Matrix<int, 2, 2> OtherTwoByTwo {5,6,7,8};
+  TGAImage diablo_fb_z(800, 800, TGAImage::GRAYSCALE);
+  std::array<float, 800*800> diablo_zbfr(std::numeric_limits<float>::min());
   
-  std::cout << "matrix1:\n";
-  TwoByTwo.print();
-  
-  std::cout << "matrix2:\n";
-  OtherTwoByTwo.print();
-  std::cout << std::endl;
-  
-  Matrix<int, 2,2> matrix_sum = TwoByTwo + OtherTwoByTwo;
-  std::cout << "result:\n";
-  matrix_sum.print();
 
-  std::cout << std::endl;
-  Matrix<int, 4, 4> three_matrix {0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15};
-  three_matrix.Tr();
-  three_matrix.print();
+  OBJObject<float> face {};
+  read_obj("assets/diablo3_pose.obj", face);
+  draw_triangles(diablo_fb, face, red, diablo_fb_z);
+  
+  diablo_fb.write_tga_file("rotated_cp_diablo_img.tga");
+  diablo_fb_z.write_tga_file("rotated_cp_diablo_img_z.tga");
   
   return 0;
 }
