@@ -226,7 +226,7 @@ void draw_line3(int sx, int sy, int dx,  int dy, TGAImage &img, const TGAColor &
   }
 }
 
-template<typename T> void draw_triangles(TGAImage &img, const OBJObject<T> &obj, const TGAColor &color, TGAImage& zbuffer)
+template<typename T> void draw_triangles(TGAImage &img, const OBJObject<T> &obj, const TGAColor &color, std::vector<float> &zbuffer)
 {
 
   std::random_device rand_colors_distribution("default");
@@ -391,7 +391,7 @@ void fill_triangle_zbuffer(const int ax,
 						   const int cy,
 						   const int cz,
 						   TGAImage &img,
-						   TGAImage &zbuffer,
+						   std::vector<float> &zbuffer,
 						   std::random_device &ran_dev)
 {
 
@@ -413,12 +413,11 @@ void fill_triangle_zbuffer(const int ax,
       float lam1 = sareaPBC / sarea_total;
       float lam2 = sareaAPC / sarea_total;
       float lam3 = sareaABP / sarea_total;
-	  auto z_val = static_cast<uint8_t>((lam1 * az) + (lam2 * bz) + (lam3 * cz));
-	  //uint8_t z_val = std::round((az + bz + cz) / 3);
-	  TGAColor z_color(z_val, z_val, z_val, UINT8_MAX);      
+	  auto z_val = static_cast<float>((lam1 * az) + (lam2 * bz) + (lam3 * cz));
+	  size_t z_index = (i*800) + j;
 	  if(lam1 >= 0.0F && lam2 >= 0.0F && lam3 >= 0.0F) {
-		if(zbuffer.get(i,j)[0] < z_val){
-		  zbuffer.set(i, j, z_color);
+		if(zbuffer.at(z_index) < z_val){
+		  zbuffer.at(z_index) =  z_val;
 		  img.set(i, j, rndColor);
 		}
 	  }
@@ -439,16 +438,14 @@ int main([[maybe_unused]]int argc,[[maybe_unused]] const char** argv){
   TGAImage framebuffer(width, height, TGAImage::RGB);
   TGAImage framebuffer_z(width, height, TGAImage::GRAYSCALE);
   TGAImage diablo_fb(800, 800, TGAImage::RGB);
-  TGAImage diablo_fb_z(800, 800, TGAImage::GRAYSCALE);
-  std::array<float, 800*800> diablo_zbfr(std::numeric_limits<float>::min());
-  
+  std::vector<float> diablo_zbfr (800*800, -1000.0F);
+
 
   OBJObject<float> face {};
   read_obj("assets/diablo3_pose.obj", face);
-  draw_triangles(diablo_fb, face, red, diablo_fb_z);
+  draw_triangles(diablo_fb, face, red, diablo_zbfr);
   
-  diablo_fb.write_tga_file("rotated_cp_diablo_img.tga");
-  diablo_fb_z.write_tga_file("rotated_cp_diablo_img_z.tga");
-  
+  diablo_fb.write_tga_file("diablo_img_ztest.tga");
+
   return 0;
 }

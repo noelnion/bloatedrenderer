@@ -95,6 +95,56 @@ public:
   
 };
 
+template <typename T>
+class Vec4 {
+public:
+  std::array<T, 4> vector;
+  Vec4() = default;
+  Vec4(T t_x, T t_y, T t_z, T t_w) : vector({t_x, t_y, t_z, t_w}) {}
+
+  void print() const {std::print("[0] = {0}, [1] = {1}, [2] = {2}, [3] = {3}\n", vector.at(0), vector.at(1), vector.at(2), vector.at(3));}
+
+  T x() const {return vector.at(0);}
+  T y() const {return vector.at(1);}
+  T z() const {return vector.at(2);}
+  T w() const {return vector.at(3);}
+
+
+  [[nodiscard]] Vec4<T> operator+(const Vec4<T> &other) const {
+	return {vector.at(0) + other.vector.at(0),
+			vector.at(1) + other.vector.at(1),
+			vector.at(2) + other.vector.at(2),
+	        vector.at(3) + other.vector.at(3)};
+  }
+
+  
+  [[nodiscard]] Vec4<T> operator-(const Vec4<T> &other) const
+  {
+		return {vector.at(0) - other.vector.at(0),
+				vector.at(1) - other.vector.at(1),
+				vector.at(2) - other.vector.at(2),				
+		        vector.at(3) - other.vector.at(3)};
+  }
+  
+  [[nodiscard]] Vec4<T> operator*(const float S) const {
+	return {static_cast<T>(S * vector.at(0)),
+			static_cast<T>(S * vector.at(1)),
+	        static_cast<T>(S * vector.at(2)),
+	        static_cast<T>(S * vector.at(3))};
+  }
+  
+  [[nodiscard]] float operator&(const Vec4<T> &other) const
+  {
+	return (vector.at(0) * other.vector.at(0)) +
+	       (vector.at(1) * other.vector.at(1)) +
+	       (vector.at(2) * other.vector.at(2)) +
+	       (vector.at(3) * other.vector.at(3))	;
+  }
+
+
+  
+};
+
 template <typename T, std::size_t Rows, std::size_t Cols>
 class Matrix {
 
@@ -149,7 +199,42 @@ public:
 	return result;
   }
 
+    [[nodiscard]] Vec4<T> operator*(const Vec4<T> &vec)
+  {
+	Vec4<T> result;
+	T partial_sum {};
+	for(size_t i = 0; i < 4; ++i)
+	  {
+		partial_sum = 0;
+		for(size_t j = 0; j < Cols; ++j)
+		  {
+			partial_sum += get(i,j) * vec.vector.at(j);
+		  }
+		result.vector.at(i) = partial_sum;
+	  }
+	return result;
+  }
+
+  template<std::size_t otherCols> Matrix<T, Rows, otherCols> operator*(const Matrix<T, Cols, otherCols> &other) const
+  {
+    Matrix<T, Rows, otherCols> result {};
+    for (size_t row = 0; row < Rows; ++row) {
+      for (size_t col = 0; col < otherCols; ++col) {
+        T partial_sum{};
+        for (size_t partial_sum_index = 0; partial_sum_index < Cols; ++partial_sum_index) {
+          partial_sum += get(row, partial_sum_index) * other.get(partial_sum_index, col);
+        }
+        result.get(row, col) = partial_sum;
+      }
+    }
+	return result;
+  }
+
   T& get (size_t i, size_t j) {
+	return data.at((i*Cols) + j);
+  }
+
+   const T& get (size_t i, size_t j) const {
 	return data.at((i*Cols) + j);
   }
   
