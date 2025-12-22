@@ -168,34 +168,51 @@ Vec3<float> viewport_transform(const Vec3<float> &vec_to_viewport_transform, con
   return Vec3(x_updated, y_updated, z_updated);
 }
 
+Matrix<float, 4, 4> viewport_matrix(const int x, const int y, const int w, const int h){
+  return {static_cast<float>(w/2), 0, 0, x + static_cast<float>(w/2),
+		  0, static_cast<float>(h/2), 0, y + static_cast<float>(h/2),
+		  0, 0, 1, 0,
+		  0, 0, 0, 1};
+}
+
 Vec3<float> central_projection_transform(const Vec3<float> &vec_to_viewport_transform) {
   constexpr float camera_dist = 2.5F;
   auto z_coord = static_cast<float>(vec_to_viewport_transform.z());
   return vec_to_viewport_transform * (1.0F / (1.0F - (z_coord/camera_dist)));
 }
 
-void draw_line1(const int sx,const int sy,const int dx, const int dy, TGAImage &img, const TGAColor &color, const float step = 0.001F)
-{
-  const auto nsteps = static_cast<int>(1.0F / step);
-  for (int i = 0; i <= nsteps; i++) {
-    const float t_param = static_cast<float>(i) * step;
-    const int x_to_draw = sx + static_cast<int>(t_param * static_cast<float>(dx - sx));
-    const int y_to_draw = sy + static_cast<int>(t_param * static_cast<float>(dy - sy));
-    img.set(x_to_draw, y_to_draw, color);
-  }
+Matrix<float, 4, 4> perspective_matrix(const float focal_len){
+  return {1, 0, 0, 0,
+		  0, 1, 0, 0,
+		  0, 0, 1, 0,
+		  0, 0, -(1/focal_len), 1};
 }
 
-void draw_line2(const int sx,const int sy,const int dx, const int dy, TGAImage &img, const TGAColor &color)
-{
+Matrix<float, 4, 4> modelview_matrix(const Vec3<float> eye, const Vec3<float> center, const Vec3<float> up){
+  Vec3<float> eye_center_diff = eye - center;
+  Vec3<float> n_basis         = eye_center_diff * (1.0F/eye_center_diff.mag());
 
-  const int x_min = std::min(sx, dx);
-  const int x_max = std::max(sx, dx);
-  for (int x_t = x_min; x_t <= x_max; x_t++) {
-    const auto t_param = static_cast<float>(x_t-sx)/static_cast<float>(dx-sx);
-    const int y_to_draw = sy + static_cast<int>(t_param * static_cast<float>(dy - sy));
-    img.set(x_t, y_to_draw, color);
-  }
+  Vec3<float> up_n_cross = up ^ n_basis;
+  Vec3<float> l_basis    = up_n_cross * (1.0F/up_n_cross.mag());
+
+  Vec3<float> n_l_cross  = n_basis ^ l_basis;
+  Vec3<float> m_basis    = n_l_cross * (1.0F/n_l_cross.mag());
+
+  Matrix<float, 4, 4> MT{l_basis.x(), l_basis.y(), l_basis.z(), 0,
+						 m_basis.x(), m_basis.y(), m_basis.z(), 0,
+						 n_basis.x(), n_basis.y(), n_basis.z(), 0,
+						 0,           0,           0,           1};
+
+  Matrix<float, 4, 4>  C{1, 0, 0, -center.x(),
+						 0, 1, 0, -center.y(),
+						 0, 0, 1, -center.z(),
+						 0, 0, 0,           1};
+
+  return MT * C;
+  
 }
+
+
 
 void draw_line3(int sx, int sy, int dx,  int dy, TGAImage &img, const TGAColor &color)
 {
@@ -226,7 +243,7 @@ void draw_line3(int sx, int sy, int dx,  int dy, TGAImage &img, const TGAColor &
   }
 }
 
-template<typename T> void draw_triangles(TGAImage &img, const OBJObject<T> &obj, const TGAColor &color, std::vector<float> &zbuffer)
+template<typename T> void draw_triangles(TGAImage &img, const OBJObject<T> &obj, std::vector<float> &zbuffer, Matrix<float, 4, 4> &mdl_mat, Matrix<float, 4, 4> &persp_mat, Matrix<float, 4, 4> &vprt_mat)
 {
 
   std::random_device rand_colors_distribution("default");
@@ -250,29 +267,28 @@ template<typename T> void draw_triangles(TGAImage &img, const OBJObject<T> &obj,
 
 	///TODO:
 	// took this step by step, need to clean it up
-	
-	auto tri1_r = rotate(tri1);
-	auto tri2_r = rotate(tri2);
-	auto tri3_r = rotate(tri3);
 
-	auto tri1_rp = central_projection_transform(tri1_r);
-	auto tri2_rp = central_projection_transform(tri2_r);
-	auto tri3_rp = central_projection_transform(tri3_r);
+	Vec4<float> tri1_m = persp_mat * mdl_mat * Vec4<float>(tri1.x(), tri1.y(), tri1.z(), 1.0F);
+	Vec4<float> tri2_m = persp_mat * mdl_mat * Vec4<float>(tri2.x(), tri2.y(), tri2.z(), 1.0F);
+	Vec4<float> tri3_m = persp_mat * mdl_mat * Vec4<float>(tri3.x(), tri3.y(), tri3.z(), 1.0F);
 
-	
-	auto tri1_rt = viewport_transform(tri1_rp, img);
-	auto tri2_rt = viewport_transform(tri2_rp, img);
-	auto tri3_rt = viewport_transform(tri3_rp, img);
+	tri1_m = tri1_m * (1.0F/tri1_m.w());
+	tri2_m = tri2_m * (1.0F/tri2_m.w());
+	tri3_m = tri3_m * (1.0F/tri3_m.w());
 
-    fill_triangle_zbuffer(std::round(tri1_rt.x()),
-						  std::round(tri1_rt.y()),
-						  std::round(tri1_rt.z()),
-						  std::round(tri2_rt.x()),
-						  std::round(tri2_rt.y()),
-						  std::round(tri2_rt.z()),
-						  std::round(tri3_rt.x()),
-						  std::round(tri3_rt.y()),
-						  std::round(tri3_rt.z()),						  
+	auto tri1_screen = vprt_mat * tri1_m;
+	auto tri2_screen = vprt_mat * tri2_m;
+	auto tri3_screen = vprt_mat * tri3_m;
+
+    fill_triangle_zbuffer(std::round(tri1_screen.x()),
+						  std::round(tri1_screen.y()),
+						  std::round(tri1_screen.z()),
+						  std::round(tri2_screen.x()),
+						  std::round(tri2_screen.y()),
+						  std::round(tri2_screen.z()),
+						  std::round(tri3_screen.x()),
+						  std::round(tri3_screen.y()),
+						  std::round(tri3_screen.z()),						  
 						  img,
 						  zbuffer,
 						  rand_colors_distribution
@@ -414,8 +430,8 @@ void fill_triangle_zbuffer(const int ax,
       float lam2 = sareaAPC / sarea_total;
       float lam3 = sareaABP / sarea_total;
 	  auto z_val = static_cast<float>((lam1 * az) + (lam2 * bz) + (lam3 * cz));
-	  size_t z_index = (i*800) + j;
-	  if(lam1 >= 0.0F && lam2 >= 0.0F && lam3 >= 0.0F) {
+	  size_t z_index = (i*800) + j;        /// TODO MAGIC NUM
+	  if(lam1 >= 0.0F && lam2 >= 0.0F && lam3 >= 0.0F && sarea_total>1.0F) {
 		if(zbuffer.at(z_index) < z_val){
 		  zbuffer.at(z_index) =  z_val;
 		  img.set(i, j, rndColor);
@@ -432,20 +448,123 @@ int main([[maybe_unused]]int argc,[[maybe_unused]] const char** argv){
   const TGAColor red    (  0,   0, 255, 255);
   const TGAColor blue   (255, 128,  64, 255);
   const TGAColor yellow (  0, 200, 255, 255);
- 
-  constexpr int width  = 64;
-  constexpr int height = 64;
-  TGAImage framebuffer(width, height, TGAImage::RGB);
-  TGAImage framebuffer_z(width, height, TGAImage::GRAYSCALE);
-  TGAImage diablo_fb(800, 800, TGAImage::RGB);
-  std::vector<float> diablo_zbfr (800*800, -1000.0F);
 
+  Vec3<float>    eye{ 30.0F , 30.0F, 30.0F};  // camera position
+  Vec3<float> center{ 0.0F , 0.0F ,0.0F};  // camera direction
+  Vec3<float>     up{ 0.0F , 1.0F, 0.0F};  // camera up vector
+ 
+  constexpr int width  = 800;
+  constexpr int height = 800;
+  TGAImage diablo_fb(width, height, TGAImage::RGB);
+  std::vector<float> diablo_zbfr (width*height, -1000.0F);
 
   OBJObject<float> face {};
   read_obj("assets/diablo3_pose.obj", face);
-  draw_triangles(diablo_fb, face, red, diablo_zbfr);
+
+  bool is_running = true;
+  std::string command_str;
   
-  diablo_fb.write_tga_file("diablo_img_ztest.tga");
+  std::cout << "enter command:" << std::endl;
+  while (std::getline(std::cin, command_str)) {
+
+
+	
+    if ("step" == command_str) {
+      std::cout << "stepping forward...\n";
+      for (int i = 0; i < height; ++i) {
+        for (int j = 0; j < width; ++j) { diablo_fb.set(i, j, TGAColor(177, 195, 209, 255)); }
+      }
+      auto MV_matrix = modelview_matrix(eye, center, up);
+      auto P_matrix = perspective_matrix((eye - center).mag());
+      auto VP_matrix = viewport_matrix(width / 16, height / 16, width * 7 / 8, height * 7 / 8);
+
+	  //reset z_buffer
+	  std::fill(diablo_zbfr.begin(), diablo_zbfr.end(), -1000.0F);
+      draw_triangles(diablo_fb, face, diablo_zbfr, MV_matrix, P_matrix, VP_matrix);
+
+      diablo_fb.write_tga_file("diablo_img_ztest.tga");
+	  std::cout << "enter command:" << std::endl;
+    }
+
+	else if ("ex+" == command_str) {
+	  eye.increment(0);
+	  std::cout << "eye: ";
+	  eye.print();
+	}
+
+	else if ("ex-" == command_str) {
+	  eye.decrement(0);
+	  std::cout << "eye: ";
+	  eye.print();
+	}
+
+	else if ("ey+" == command_str) {
+	  eye.increment(1);
+	  std::cout << "eye: ";
+	  eye.print();
+	}
+
+	else if ("ey-" == command_str) {
+	  eye.decrement(1);
+	  std::cout << "eye: ";
+	  eye.print();
+	}
+
+	else if ("ez+" == command_str) {
+	  eye.increment(2);
+	  std::cout << "eye: ";
+	  eye.print();
+	}
+
+	else if ("ez-" == command_str) {
+	  eye.decrement(2);
+	  std::cout << "eye: ";
+	  eye.print();
+	}
+
+	else if ("cx+" == command_str) {
+	  center.tiny_increment(0);
+	  std::cout << "center:";
+	  center.print();
+	}
+
+	else if ("cx-" == command_str) {
+	  center.tiny_decrement(0);
+	  std::cout << "center:";
+	  center.print();
+	}
+
+	else if ("cy+" == command_str) {
+	  center.tiny_increment(1);
+	  std::cout << "center:";
+	  center.print();
+	}
+
+	else if ("cy-" == command_str) {
+	  center.tiny_decrement(1);
+	  std::cout << "center:";
+	  center.print();
+	}
+
+	else if ("cz+" == command_str) {
+	  center.tiny_increment(2);
+	  std::cout << "center:";
+	  center.print();
+	}
+
+	else if ("cz-" == command_str) {
+	  center.tiny_decrement(2);
+	  std::cout << "center:";
+	  center.print();
+	}
+
+    else if ("exit" == command_str) {
+      break;
+    } else {
+      std::cout << "unknown command" << std::endl;
+	  std::cout << "enter command:" << std::endl;
+    }
+  }
 
   return 0;
 }

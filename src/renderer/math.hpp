@@ -54,6 +54,12 @@ public:
   T y() const {return vector.at(1);}
   T z() const {return vector.at(2);}
 
+  void increment(size_t t_index) {vector.at(t_index) += static_cast<T>(1.0F);}
+  void tiny_increment(size_t t_index) {vector.at(t_index) += static_cast<T>(0.05F);}
+  
+  void decrement(size_t t_index) {vector.at(t_index) -= static_cast<T>(1.0F);}
+  void tiny_decrement(size_t t_index) {vector.at(t_index) -= static_cast<T>(0.05F);}
+
   [[nodiscard]] float mag() const
   {
 	return std::hypot(vector.at(0), vector.at(1), vector.at(2));
