@@ -1,4 +1,5 @@
 #include <iostream>
+#include <algorithm>
 #include <cstring>
 #include <span>
 #include <cstdint>
@@ -244,6 +245,13 @@ void TGAImage::set(int x, int y, const TGAColor &color) {
 	return;
   }
     memcpy(data.data()+((x+y*w)*bpp), color.bgra, bpp);
+}
+
+void TGAImage::reset(const TGAColor &color)
+{
+  for (int i = 0; i < w; ++i) {
+    for (int j = 0; j < h; ++j) { set(i, j, color); }
+  }
 }
 
 void TGAImage::flip_horizontally() {

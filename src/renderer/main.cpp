@@ -449,7 +449,7 @@ int main([[maybe_unused]]int argc,[[maybe_unused]] const char** argv){
   const TGAColor blue   (255, 128,  64, 255);
   const TGAColor yellow (  0, 200, 255, 255);
 
-  Vec3<float>    eye{ 30.0F , 30.0F, 30.0F};  // camera position
+  Vec3<float>    eye{ 300.0F , 300.0F, 300.0F};  // camera position
   Vec3<float> center{ 0.0F , 0.0F ,0.0F};  // camera direction
   Vec3<float>     up{ 0.0F , 1.0F, 0.0F};  // camera up vector
  
@@ -471,9 +471,7 @@ int main([[maybe_unused]]int argc,[[maybe_unused]] const char** argv){
 	
     if ("step" == command_str) {
       std::cout << "stepping forward...\n";
-      for (int i = 0; i < height; ++i) {
-        for (int j = 0; j < width; ++j) { diablo_fb.set(i, j, TGAColor(177, 195, 209, 255)); }
-      }
+	  diablo_fb.reset(TGAColor(177, 195, 209, 255));
       auto MV_matrix = modelview_matrix(eye, center, up);
       auto P_matrix = perspective_matrix((eye - center).mag());
       auto VP_matrix = viewport_matrix(width / 16, height / 16, width * 7 / 8, height * 7 / 8);
