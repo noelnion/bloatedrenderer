@@ -67,24 +67,6 @@ public:
     for (const auto &face : faces) { face.print(); }
   }
 
-  void viewport_transform(const TGAImage &img)
-  {
-    const int half_height = img.height() / 2;
-	const int half_width =  img.width()  / 2;
-	const float half_z = static_cast<float>(UINT8_MAX) / 2;
-	for (auto &vert : vertices) {
-	   auto current_x = vert.get_x();
-	   auto current_y = vert.get_y();
-	   auto current_z = static_cast<float>(vert.get_z());
-	   vert.vertex_coords.at(0) = (current_x + static_cast<T>(1)) * half_width;
-	   vert.vertex_coords.at(1) = (current_y + static_cast<T>(1)) * half_height;
-	   vert.vertex_coords.at(2) = std::round((current_z + 1.0F) * half_z);
-	}
-	  
-  }
-
-
-
 
 };
 
@@ -104,15 +86,6 @@ public:
   [[nodiscard]] T& get_ymin() const {return vertices.at(2);}  
   [[nodiscard]] T& get_ymax() const {return vertices.at(3);}
 };
-
-template <typename T>
-Vec3<T> rotate(Vec3<T> &vec_to_rotate){
-  float a = std::numbers::pi_v<float>/6;
-  Matrix<T, 3,3> Ry({std::cos(a), 0, std::sin(a),
-	                           0,       1,      0,
-				    		-std::sin(a), 0, std::cos(a)});
-  return Ry*vec_to_rotate;
-}
 
 template <typename T>
 bool read_obj(const std::filesystem::path &obj_file_path, OBJObject<T>& obj_object)
@@ -157,16 +130,6 @@ bool read_obj(const std::filesystem::path &obj_file_path, OBJObject<T>& obj_obje
   return true;
 }
 
-Vec3<float> viewport_transform(const Vec3<float> &vec_to_viewport_transform, const TGAImage &img)
-{
-  const int half_height = img.height() / 2;
-  const int half_width =  img.width()  / 2;
-  const float half_z = static_cast<float>(UINT8_MAX) / 2;
-  float x_updated = (vec_to_viewport_transform.x() + static_cast<float>(1)) * half_width;
-  float y_updated = (vec_to_viewport_transform.y() + static_cast<float>(1)) * half_height;
-  float z_updated = std::round((vec_to_viewport_transform.z() + 1.0F) * half_z);
-  return Vec3(x_updated, y_updated, z_updated);
-}
 
 Matrix<float, 4, 4> viewport_matrix(const int x, const int y, const int w, const int h){
   return {static_cast<float>(w/2), 0, 0, x + static_cast<float>(w/2),
@@ -175,11 +138,6 @@ Matrix<float, 4, 4> viewport_matrix(const int x, const int y, const int w, const
 		  0, 0, 0, 1};
 }
 
-Vec3<float> central_projection_transform(const Vec3<float> &vec_to_viewport_transform) {
-  constexpr float camera_dist = 2.5F;
-  auto z_coord = static_cast<float>(vec_to_viewport_transform.z());
-  return vec_to_viewport_transform * (1.0F / (1.0F - (z_coord/camera_dist)));
-}
 
 Matrix<float, 4, 4> perspective_matrix(const float focal_len){
   return {1, 0, 0, 0,
@@ -210,37 +168,6 @@ Matrix<float, 4, 4> modelview_matrix(const Vec3<float> eye, const Vec3<float> ce
 
   return MT * C;
   
-}
-
-
-
-void draw_line3(int sx, int sy, int dx,  int dy, TGAImage &img, const TGAColor &color)
-{
-
-  bool switched = false;
-  const auto slope = static_cast<float>(dy - sy) / static_cast<float>(dx - sx);
-  
-  if(std::abs(slope) > 1.0F){
-	std::swap(sx, sy);
-	std::swap(dx, dy);
-	switched = true;
-  }
-
-    if (sx > dx) {
-    std::swap(sx, dx);
-    std::swap(sy, dy);
-  }
-  
-  for (int x_t = sx; x_t <= dx; x_t++) {
-    const float t_param = static_cast<float>(x_t - sx) / static_cast<float>(dx - sx);
-	const float dy_to_draw = std::round(t_param * static_cast<float>(dy - sy));
-    const int y_to_draw = sy + static_cast<int>(dy_to_draw);
-    if (switched) {
-      img.set(y_to_draw, x_t, color);
-    } else {
-      img.set(x_t, y_to_draw, color);
-    }
-  }
 }
 
 template<typename T> void draw_triangles(TGAImage &img, const OBJObject<T> &obj, std::vector<float> &zbuffer, Matrix<float, 4, 4> &mdl_mat, Matrix<float, 4, 4> &persp_mat, Matrix<float, 4, 4> &vprt_mat)
@@ -297,21 +224,6 @@ template<typename T> void draw_triangles(TGAImage &img, const OBJObject<T> &obj,
   }
 }
 
-void draw_triangle(const int ax,
-  const int ay,
-  const int bx,
-  const int by,
-  const int cx,
-  const int cy,
-  TGAImage &img,
-  const TGAColor &clr)
-{
-  draw_line3(ax, ay, bx, by, img, clr);
-  draw_line3(ax, ay, cx, cy, img, clr);
-  draw_line3(cx, cy, bx, by, img, clr);
-}
-
-
 
 float s_triangle_area(const int ax, const int ay, const int bx, const int by, const int cx, const int cy)
 {
@@ -326,75 +238,6 @@ Rectangle<T> get_bounding_box(int ax, int ay, int bx, int by, int cx, int cy){
   T x_max = std::max({ax, bx, cx});
   T y_max = std::max({ay, by, cy});  
   return Rectangle(x_min, x_max, y_min, y_max);
-}
-
-void fill_triangle_shader(const int ax,
-				   const int ay,
-				   const int az,
-				   const int bx,
-				   const int by,
-				   const int bz,
-				   const int cx,
-				   const int cy,
-				   const int cz,
-				   TGAImage &img)
-{
-  float sarea_total = s_triangle_area(ax, ay, bx, by, cx, cy);
-  Rectangle<int> bounding_box = get_bounding_box<int>(ax, ay, bx, by, cx, cy);
-  for (int i = bounding_box.get_xmin(); i <= bounding_box.get_xmax(); ++i) {
-    for (int j = bounding_box.get_ymin(); j <= bounding_box.get_ymax(); ++j) {
-      // img.set(i,j,clr);
-	  /// TODO: clean dis shi up
-      float sareaPBC = s_triangle_area(i, j, bx, by, cx, cy);
-      float sareaAPC = s_triangle_area(ax, ay, i, j, cx, cy);
-      float sareaABP = s_triangle_area(ax, ay, bx, by, i, j);
-      float lam1 = sareaPBC / sarea_total;
-      float lam2 = sareaAPC / sarea_total;
-      float lam3 = sareaABP / sarea_total;
-	  if(lam1 >= 0.0F && lam2 >= 0.0F && lam3 >= 0.0F) {
-		uint8_t red_value = lam1 * 255;
-		uint8_t blue_value = lam2 * 255;
-		uint8_t green_value = lam3 * 255;
-		TGAColor shade(red_value, blue_value, green_value, 255);
-		img.set(i,j,shade);
-	  }
-	}
-  }
-}
-
-void fill_triangle(const int ax,
-				   const int ay,
-				   const int bx,
-				   const int by,
-				   const int cx,
-				   const int cy,
-				   TGAImage &img,
-				   const TGAColor &clr)
-{
-  float sarea_total = s_triangle_area(ax, ay, bx, by, cx, cy);
-  Rectangle<int> bounding_box = get_bounding_box<int>(ax, ay, bx, by, cx, cy);
-  for (int i = bounding_box.get_xmin(); i <= bounding_box.get_xmax(); ++i) {
-    for (int j = bounding_box.get_ymin(); j <= bounding_box.get_ymax(); ++j) {
-      // img.set(i,j,clr);
-	  /// TODO: clean dis shi up
-	  auto rand_r = static_cast<uint8_t>(std::rand() % UINT8_MAX);
-	  auto rand_g = static_cast<uint8_t>(std::rand() % UINT8_MAX);
-	  auto rand_b = static_cast<uint8_t>(std::rand() % UINT8_MAX);
-    
-	  TGAColor rndColor(rand_r, rand_g, rand_b, 255);
-	  
-      float sareaPBC = s_triangle_area(i, j, bx, by, cx, cy);
-      float sareaAPC = s_triangle_area(ax, ay, i, j, cx, cy);
-      float sareaABP = s_triangle_area(ax, ay, bx, by, i, j);
-      float lam1 = sareaPBC / sarea_total;
-      float lam2 = sareaAPC / sarea_total;
-      float lam3 = sareaABP / sarea_total;
-	  
-	  if(lam1 >= 0.0F && lam2 >= 0.0F && lam3 >= 0.0F) {
-		img.set(i,j,rndColor);
-	  }
-	}
-  }
 }
 
 void fill_triangle_zbuffer(const int ax,
