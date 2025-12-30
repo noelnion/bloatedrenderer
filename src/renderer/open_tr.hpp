@@ -80,10 +80,11 @@ Primitive vertex_shader(FaceTriangles ftriag, Matrix<float, 4, 4> &mdl_mat, Matr
   }
 
 
-//template <typename FragFunc>
+template <typename FragFunc>
 void rasterize(Primitive &primitive,
 			   TGAImage &img,
-			   std::vector<float> &zbuffer)
+			   std::vector<float> &zbuffer,
+			   FragFunc fragment_shader_func)
 {
 
   auto& [ax, ay, az, aw] = primitive.at(0).screen_pos.vector;
@@ -112,7 +113,7 @@ void rasterize(Primitive &primitive,
 	  
 	  if(lam1 >= 0.0F && lam2 >= 0.0F && lam3 >= 0.0F && sarea_total>1.0F) {
 		if(zbuffer.at(z_index) < z_val){
-		  TGAColor pixel_color(150,150,150,255);
+		  auto pixel_color = fragment_shader_func();
 		  zbuffer.at(z_index) =  z_val;
 		  img.set(i, j, pixel_color);
 		}

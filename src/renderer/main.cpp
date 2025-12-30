@@ -3,21 +3,15 @@
 #include "OBJUtils.hpp"
 #include "open_tr.hpp"
 
-#include <numbers>
 #include <algorithm>
-#include <cmath>
-#include <cstdint>
 #include <filesystem>
-#include <array>
 #include <vector>
 #include <string>
 #include <iostream>
 #include <cstdlib>
-#include <random>
 
-
-
-
+TGAColor gray_shader() {return {150,150,150,255};}
+TGAColor red_shader()  {return {30,30,255,255};}
 
 int main([[maybe_unused]]int argc,[[maybe_unused]] const char** argv){
 
@@ -56,7 +50,7 @@ int main([[maybe_unused]]int argc,[[maybe_unused]] const char** argv){
  // 
    while (facestream.getFace(face_triangles)){
 	 Primitive primitive = vertex_shader(face_triangles, MV_matrix, P_matrix, VP_matrix);
-	 rasterize(primitive, diablo_fb, diablo_zbfr);
+	 rasterize(primitive, diablo_fb, diablo_zbfr, red_shader);
    }
 
    //OLD
