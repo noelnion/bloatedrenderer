@@ -4,7 +4,6 @@
 #include "math.hpp"
 #include "tgaimage.hpp"
 
-#include <utility>
 
 float s_triangle_area(const int ax, const int ay, const int bx, const int by, const int cx, const int cy)
 {
