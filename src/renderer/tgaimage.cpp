@@ -247,7 +247,7 @@ void TGAImage::set(int x, int y, const TGAColor &color) {
     memcpy(data.data()+((x+y*w)*bpp), color.bgra, bpp);
 }
 
-void TGAImage::reset(const TGAColor &color)
+void TGAImage::clear(const TGAColor &color)
 {
   for (int i = 0; i < w; ++i) {
     for (int j = 0; j < h; ++j) { set(i, j, color); }

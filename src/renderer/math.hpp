@@ -54,6 +54,10 @@ public:
   T y() const {return vector.at(1);}
   T z() const {return vector.at(2);}
 
+  void set_x(T t_new_x)  {vector.at(0) = t_new_x;}
+  void set_y(T t_new_y)  {vector.at(1) = t_new_y;}
+  void set_z(T t_new_z)  {vector.at(2) = t_new_z;}
+
   void increment(size_t t_index) {vector.at(t_index) += static_cast<T>(1.0F);}
   void tiny_increment(size_t t_index) {vector.at(t_index) += static_cast<T>(0.05F);}
   
@@ -114,6 +118,11 @@ public:
   T y() const {return vector.at(1);}
   T z() const {return vector.at(2);}
   T w() const {return vector.at(3);}
+
+  void set_x(T t_new_x)  {vector.at(0) = t_new_x;}
+  void set_y(T t_new_y)  {vector.at(1) = t_new_y;}
+  void set_z(T t_new_z)  {vector.at(2) = t_new_z;}
+  void set_w(T t_new_w)  {vector.at(3) = t_new_w;}
 
 
   [[nodiscard]] Vec4<T> operator+(const Vec4<T> &other) const {
