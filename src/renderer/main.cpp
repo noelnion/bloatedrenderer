@@ -24,7 +24,8 @@ int main([[maybe_unused]]int argc,[[maybe_unused]] const char** argv){
   Vec3<float> center{ 0.0F , 0.0F ,0.0F};  // camera direction
   Vec3<float>     up{ 0.0F , 1.0F, 0.0F};  // camera up vector
 
-  Vec3<float>  light{ 1.0F , 1.0F, 1.0F};  // camera up vector
+  Vec3<float>  light{ 1.0F , 1.0F, 1.0F};    // light source pos
+  TGAColor light_color(144, 117, 255, 255);  // light source color
  
   constexpr int width  = 800;
   constexpr int height = 800;
@@ -57,7 +58,9 @@ int main([[maybe_unused]]int argc,[[maybe_unused]] const char** argv){
 	Vec3<float> light_dir_vec(light_mdl.x(), light_mdl.y(), light_mdl.z());
 	auto light_dir_unit = light_dir_vec * (1.0F / light_dir_vec.mag());
 
-	uint8_t light_value = UINT8_MAX;
+	uint8_t blue = light_color[0];
+	uint8_t gren = light_color[1];
+	uint8_t redd = light_color[2];
   
 	float ambient_val = 0.3;
 	
@@ -68,9 +71,17 @@ int main([[maybe_unused]]int argc,[[maybe_unused]] const char** argv){
 	float difuse_val = std::max(0.0F, fragIn.normal & light_dir_unit);
 	float difuse_coeff = 0.4F;
 
-	light_value *= std::min(1.0F, ambient_val + difuse_coeff*difuse_val + 0.9F*spec_val);
+	float total_lighting = ambient_val + difuse_coeff*difuse_val + 0.9F*spec_val;
 
-	return {light_value, light_value, light_value, UINT8_MAX};
+	///TODO tgacolor optimization to do per channel multiplication
+	blue *= std::min(1.0F, total_lighting);
+	redd *= std::min(1.0F, total_lighting);
+	gren *= std::min(1.0F, total_lighting);
+
+	return {blue,
+			gren,
+			redd,
+			UINT8_MAX};
   };
 
   auto blueish_shader = [&](FragmentIn fragIn) -> TGAColor {
@@ -89,6 +100,11 @@ int main([[maybe_unused]]int argc,[[maybe_unused]] const char** argv){
   read_obj("assets/african_head_eye_outer.obj", eyes);
   facestream.set(eyes);
 
+
+  light_color[0] = 50;
+  light_color[1] = 50;
+  light_color[2] = 50;  
+	
   while (facestream.getFace(face_triangles)){
    Primitive primitive = vertex_shader(face_triangles, MV_matrix, P_matrix, VP_matrix);
 	 
