@@ -14,7 +14,56 @@ float s_triangle_area(const int ax, const int ay, const int bx, const int by, co
 class VertexOut{
 public:
   Vec4<float> screen_pos;
+  Vec3<float> normal;
+  Vec3<float> world_pos;
+  Vec2<float> uv;
+  float inv_w{};
+  
   VertexOut(Vec4<float> t_scrn_pos) : screen_pos(t_scrn_pos) {}
+  VertexOut() = default;
+
+  void set_screen_pos(Vec4<float> t_pos)
+  {
+	// stupid, need to sort this out
+    screen_pos.set_x(t_pos.x());
+	screen_pos.set_y(t_pos.y());
+	screen_pos.set_z(t_pos.z());
+	screen_pos.set_w(t_pos.w());
+  }
+
+  void set_normal(Vec3<float> t_normal)
+  {
+	// stupid, need to sort this out
+    normal.set_x(t_normal.x());
+	normal.set_y(t_normal.y());
+	normal.set_z(t_normal.z());
+  }
+
+  void set_world_pos(Vec3<float> t_world)
+  {
+	// stupid, need to sort this out
+    world_pos.set_x(t_world.x());
+	world_pos.set_y(t_world.y());
+	world_pos.set_z(t_world.z());
+  }
+  
+};
+
+class FragmentIn{
+public:
+  Vec3<float> normal;
+  Vec3<float> world_pos;
+  Vec2<float> uv;
+  double depth{};
+  
+  FragmentIn(Vec3<float> t_normal, Vec3<float> t_world_pos, Vec2<float> t_uv, double t_depth) :
+	normal(t_normal),
+	world_pos(t_world_pos),
+	uv(t_uv),
+  	depth(t_depth) {}
+  
+  FragmentIn() = default;
+  
 };
 
 using Primitive = std::array<VertexOut, 3>;
@@ -28,6 +77,12 @@ private:
 public:
 
   FacesStream(OBJObject<float> &t_obj) : obj(t_obj) {}
+  FacesStream() = default;
+
+  void set(OBJObject<float> &t_obj) {
+	obj = t_obj;
+	index = 0;
+  }
   
   bool getFace(FaceTriangles& out){
 	if(index >= obj.faces.size()){
@@ -59,24 +114,64 @@ public:
   
 };
 
-Primitive vertex_shader(FaceTriangles ftriag, Matrix<float, 4, 4> &mdl_mat, Matrix<float, 4, 4> &persp_mat, Matrix<float, 4, 4> &vprt_mat){
+Primitive vertex_shader(FaceTriangles ftriag, Matrix<float, 4, 4> &view_mat, Matrix<float, 4, 4> &persp_mat, Matrix<float, 4, 4> &vprt_mat){
 
-    auto& [tri1, tri2, tri3] = ftriag;
+  VertexOut v1;
+  VertexOut v2;
+  VertexOut v3;
 
-	Vec4<float> tri1_m = persp_mat * mdl_mat * Vec4<float>(tri1.x(), tri1.y(), tri1.z(), 1.0F);
-	Vec4<float> tri2_m = persp_mat * mdl_mat * Vec4<float>(tri2.x(), tri2.y(), tri2.z(), 1.0F);
-	Vec4<float> tri3_m = persp_mat * mdl_mat * Vec4<float>(tri3.x(), tri3.y(), tri3.z(), 1.0F);
+  auto &[tri1, tri2, tri3] = ftriag;
 
-	tri1_m = tri1_m * (1.0F/tri1_m.w());
-	tri2_m = tri2_m * (1.0F/tri2_m.w());
-	tri3_m = tri3_m * (1.0F/tri3_m.w());
+  auto tri1_m = view_mat * Vec4<float>(tri1.x(), tri1.y(), tri1.z(), 1.0F);
+  auto tri2_m = view_mat * Vec4<float>(tri2.x(), tri2.y(), tri2.z(), 1.0F);
+  auto tri3_m = view_mat * Vec4<float>(tri3.x(), tri3.y(), tri3.z(), 1.0F);
+  
+  v1.set_world_pos(tri1_m.xyz());
+  v2.set_world_pos(tri2_m.xyz());
+  v3.set_world_pos(tri3_m.xyz());
 
-	auto tri1_screen = vprt_mat * tri1_m;
-	auto tri2_screen = vprt_mat * tri2_m;
-	auto tri3_screen = vprt_mat * tri3_m;
+  //--- Calculate Unit normal for vertexout----------//
+  Vec3<float> A(tri1_m.x(), tri1_m.y(), tri1_m.z());
+  Vec3<float> B(tri2_m.x(), tri2_m.y(), tri2_m.z());
+  Vec3<float> C(tri3_m.x(), tri3_m.y(), tri3_m.z());
+  Vec3<float> AB = B - A;
+  Vec3<float> AC = C - A;
+  Vec3<float> normal      = (AB ^ AC);
+  Vec3<float> unit_normal = normal * (1.0F / normal.mag());
+  v1.normal = unit_normal;
+  v2.normal = unit_normal;
+  v3.normal = unit_normal;
+  //-------------------------------------------------//
 
-	return {VertexOut(tri1_screen), VertexOut(tri2_screen), VertexOut(tri3_screen)};
-  }
+  //---------apply transformations-------------------//
+  Vec4<float> tri1_clip = persp_mat * tri1_m;
+  Vec4<float> tri2_clip = persp_mat * tri2_m;
+  Vec4<float> tri3_clip = persp_mat * tri3_m;
+
+  //-----Set inverse w for vertexout-----------------//
+  v1.inv_w = 1.0F / tri1_clip.w();
+  v2.inv_w = 1.0F / tri2_clip.w();
+  v3.inv_w = 1.0F / tri3_clip.w();
+  //-------------------------------------------------//
+
+  //-----perspective (w) divide--------//
+  tri1_clip = tri1_clip * (1.0F/tri1_clip.w());
+  tri2_clip = tri2_clip * (1.0F/tri2_clip.w());
+  tri3_clip = tri3_clip * (1.0F/tri3_clip.w());
+  //-----------------------------------//
+
+  //----------screen space transform---------//
+  auto tri1_screen = vprt_mat * tri1_clip;
+  auto tri2_screen = vprt_mat * tri2_clip;
+  auto tri3_screen = vprt_mat * tri3_clip;
+
+  v1.set_screen_pos(tri1_screen);
+  v2.set_screen_pos(tri2_screen);
+  v3.set_screen_pos(tri3_screen);
+  //-----------------------------------------//
+
+  return {v1, v2, v3};
+}
 
 
 template <typename FragFunc>
@@ -98,11 +193,14 @@ void rasterize(Primitive &primitive,
   for (int i = box_x_min; i <= box_x_max; ++i) {
     for (int j = box_y_min; j <= box_y_max; ++j) {
 
-      float sareaPBC = s_triangle_area(i, j, bx, by, cx, cy);
+
+
+	  //interpolation weights
+
+	  float sareaPBC = s_triangle_area(i, j, bx, by, cx, cy);
       float sareaAPC = s_triangle_area(ax, ay, i, j, cx, cy);
       float sareaABP = s_triangle_area(ax, ay, bx, by, i, j);
-
-	  //interpolate
+	  
       float lam1 = sareaPBC / sarea_total;
       float lam2 = sareaAPC / sarea_total;
       float lam3 = sareaABP / sarea_total;
@@ -112,7 +210,13 @@ void rasterize(Primitive &primitive,
 	  
 	  if(lam1 >= 0.0F && lam2 >= 0.0F && lam3 >= 0.0F && sarea_total>1.0F) {
 		if(zbuffer.at(z_index) < z_val){
-		  auto pixel_color = fragment_shader_func();
+		  
+		  FragmentIn fragment_input(primitive.at(0).normal,        // INTERPOLATE NORMAL, TEMPORARY!! PHONG FLAT SHADING!
+									Vec3<float>(0.0F, 0.0F, 0.0F),
+									Vec2<float>(0.0F, 0.0F),
+									z_val);
+		  
+		  auto pixel_color = fragment_shader_func(fragment_input);
 		  zbuffer.at(z_index) =  z_val;
 		  img.set(i, j, pixel_color);
 		}
@@ -158,12 +262,5 @@ Matrix<float, 4, 4> lookat(const Vec3<float> eye, const Vec3<float> center, cons
 
   return MT * C;
 }
-
-
-
-
-class IShader {
-  virtual std::pair<bool,TGAColor> fragment(const Vec3<float> bar) const = delete;
-};
 
 #endif // OPEN_TR_HPP

@@ -12,45 +12,6 @@
 #include <cstdlib>
 #include <algorithm>
 
-TGAColor gray_shader() {return {150,150,150,255};}
-TGAColor red_shader()  {return {30,30,255,255};}
-
-
-
-
-TGAColor phong_shader(Vec3<float> &light_pos, const FaceTriangles &ftriag, Matrix<float, 4, 4> &mdl_mat){
-
-  auto& [tri1, tri2, tri3] = ftriag;
-
-  Vec4<float> tri1_m =  mdl_mat * Vec4<float>(tri1.x(), tri1.y(), tri1.z(), 1.0F);
-  Vec4<float> tri2_m =  mdl_mat * Vec4<float>(tri2.x(), tri2.y(), tri2.z(), 1.0F);
-  Vec4<float> tri3_m =  mdl_mat * Vec4<float>(tri3.x(), tri3.y(), tri3.z(), 1.0F);
-
-  Vec3<float> A(tri1_m.x(), tri1_m.y(), tri1_m.z());
-  Vec3<float> B(tri2_m.x(), tri2_m.y(), tri2_m.z());
-  Vec3<float> C(tri3_m.x(), tri3_m.y(), tri3_m.z());
-
-  Vec4<float> light_mdl = mdl_mat * Vec4<float>(light_pos.x(), light_pos.y(), light_pos.z(), 1.0F);
-  Vec3<float> light_dir_vec(light_mdl.x(), light_mdl.y(), light_mdl.z());
-  Vec3<float> light_dir_unit = light_dir_vec * (1.0F / light_dir_vec.mag());
-
-  uint8_t light_value = UINT8_MAX;
-  
-   float ambient_val = 0.3F;
-   Vec3<float> AB = B - A;
-   Vec3<float> AC = B - C;
-
-  Vec3<float> normal      = (AB ^ AC);
-  Vec3<float> unit_normal = normal * (1.0F / normal.mag());
-
-  float difuse_val = std::max(0.0F, unit_normal & light_dir_unit);
-
-  light_value *= std::min(1.0F, ambient_val + 0.4F * difuse_val);
-
-  return {light_value, light_value, light_value, UINT8_MAX};
-  
-}
-
 int main([[maybe_unused]]int argc,[[maybe_unused]] const char** argv){
 
   const TGAColor white  (255, 255, 255, 255); // attention, BGRA order
@@ -83,58 +44,58 @@ int main([[maybe_unused]]int argc,[[maybe_unused]] const char** argv){
   //reset z_buffer
   std::fill(diablo_zbfr.begin(), diablo_zbfr.end(), -1000.0F);  //maybe in open_tr
 
-  //desired usage
 
-   FacesStream facestream(model);
- //
-   FaceTriangles face_triangles {};
- //
-auto phong_lam = [&]() -> TGAColor {
-  auto& [tri1, tri2, tri3] = face_triangles;
+  FacesStream facestream(model);
 
-  Vec4<float> tri1_m =  MV_matrix * Vec4<float>(tri1.x(), tri1.y(), tri1.z(), 1.0F);
-  Vec4<float> tri2_m =  MV_matrix * Vec4<float>(tri2.x(), tri2.y(), tri2.z(), 1.0F);
-  Vec4<float> tri3_m =  MV_matrix * Vec4<float>(tri3.x(), tri3.y(), tri3.z(), 1.0F);
+  FaceTriangles face_triangles {};
 
-  Vec3<float> A(tri1_m.x(), tri1_m.y(), tri1_m.z());
-  Vec3<float> B(tri2_m.x(), tri2_m.y(), tri2_m.z());
-  Vec3<float> C(tri3_m.x(), tri3_m.y(), tri3_m.z());
+  auto phong_lam = [&](FragmentIn fragIn) -> TGAColor {
+	auto& [tri1, tri2, tri3] = face_triangles;
 
-  Vec4<float> light_mdl = MV_matrix * Vec4<float>(light.x(), light.y(), light.z(), 1.0F);
-  Vec3<float> light_dir_vec(light_mdl.x(), light_mdl.y(), light_mdl.z());
-  auto light_dir_unit = light_dir_vec * (1.0F / light_dir_vec.mag());
 
-  uint8_t light_value = UINT8_MAX;
+	Vec4<float> light_mdl = MV_matrix * Vec4<float>(light.x(), light.y(), light.z(), 1.0F);
+	Vec3<float> light_dir_vec(light_mdl.x(), light_mdl.y(), light_mdl.z());
+	auto light_dir_unit = light_dir_vec * (1.0F / light_dir_vec.mag());
+
+	uint8_t light_value = UINT8_MAX;
   
-  float ambient_val = 0.3;
-  Vec3<float> AB = B - A;
-  Vec3<float> AC = C - A;
+	float ambient_val = 0.3;
+	
+	Vec3<float> reflected = fragIn.normal * ((fragIn.normal & light_dir_unit) * 2) - light_dir_unit;
+	Vec3<float> reflected_unit = reflected * (1.0F / reflected.mag());
+	float spec_val = std::pow(std::max(reflected_unit.z(), 0.0F), 35);
 
-  Vec3<float> normal      = (AB ^ AC);
-  Vec3<float> unit_normal = normal * (1.0F / normal.mag());
+	float difuse_val = std::max(0.0F, fragIn.normal & light_dir_unit);
+	float difuse_coeff = 0.4F;
 
-  Vec3<float> reflected = unit_normal * ((unit_normal & light_dir_unit) * 2) - light_dir_unit;
-  Vec3<float> reflected_unit = reflected * (1.0F / reflected.mag());
-  float spec_val = std::pow(std::max(reflected_unit.z(), 0.0F), 35);
+	light_value *= std::min(1.0F, ambient_val + difuse_coeff*difuse_val + 0.9F*spec_val);
 
-  float difuse_val = std::max(0.0F, unit_normal & light_dir_unit);
-  float difuse_coeff = 0.4F;
+	return {light_value, light_value, light_value, UINT8_MAX};
+  };
 
-  light_value *= std::min(1.0F, ambient_val + difuse_coeff*difuse_val + 0.9F*spec_val);
+  auto blueish_shader = [&](FragmentIn fragIn) -> TGAColor {
+	return {222, 20, 100, UINT8_MAX};
+  };
 
-  return {light_value, light_value, light_value, UINT8_MAX};
- };
+  auto bound_shader = phong_lam;
    
-   while (facestream.getFace(face_triangles)){
-	 Primitive primitive = vertex_shader(face_triangles, MV_matrix, P_matrix, VP_matrix);
+  while (facestream.getFace(face_triangles)){
+	Primitive primitive = vertex_shader(face_triangles, MV_matrix, P_matrix, VP_matrix);
 	 
-	 rasterize(primitive, diablo_fb, diablo_zbfr, phong_lam);
-   }
+	rasterize(primitive, diablo_fb, diablo_zbfr, bound_shader);
+  }
 
-   //OLD
-   //draw_primitives(diablo_fb, model, diablo_zbfr, MV_matrix, P_matrix, VP_matrix);
+  OBJObject<float> eyes {};
+  read_obj("assets/african_head_eye_outer.obj", eyes);
+  facestream.set(eyes);
 
-  diablo_fb.write_tga_file("diablo_img_ztest.tga");
+  while (facestream.getFace(face_triangles)){
+   Primitive primitive = vertex_shader(face_triangles, MV_matrix, P_matrix, VP_matrix);
+	 
+   rasterize(primitive, diablo_fb, diablo_zbfr, bound_shader);
+ }
+
+  diablo_fb.write_tga_file("shading_test.tga");
 
   return 0;
 }
