@@ -121,6 +121,9 @@ public:
   void set_w(T t_new_w)  {vector.at(3) = t_new_w;}
 
   Vec3<T> xyz() {return {x(), y(), z()};}
+  Vec4<int> round_to_int() {
+	return {std::lround(x()), std::lround(y()), std::lround(z()), std::lround(w())};
+  }
 
 
   [[nodiscard]] Vec4<T> operator+(const Vec4<T> &other) const {

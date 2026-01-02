@@ -14,24 +14,31 @@ float s_triangle_area(const int ax, const int ay, const int bx, const int by, co
   return 0.5F * static_cast<float>(((ax - cx)*(by - ay)) - ((ax - bx)*(cy - ay)));
 }
 
+Matrix<float, 4, 4> viewport_matrix(const int x, const int y, const int w, const int h){
+  return {static_cast<float>(w/2), 0, 0, x + static_cast<float>(w/2),
+		  0, static_cast<float>(h/2), 0, y + static_cast<float>(h/2),
+		  0, 0, 1, 0,
+		  0, 0, 0, 1};
+}
+
 class VertexOut{
 public:
-  Vec4<float> screen_pos;
+  Vec4<float> clip_pos;
   Vec3<float> normal;
   Vec3<float> world_pos;
   Vec2<float> uv;
   float inv_w{};
   
-  VertexOut(Vec4<float> t_scrn_pos) : screen_pos(t_scrn_pos) {}
+  VertexOut(Vec4<float> t_clip_pos) : clip_pos(t_clip_pos) {}
   VertexOut() = default;
 
-  void set_screen_pos(Vec4<float> t_pos)
+  void set_clip_pos(Vec4<float> t_clip)
   {
 	// stupid, need to sort this out
-    screen_pos.set_x(t_pos.x());
-	screen_pos.set_y(t_pos.y());
-	screen_pos.set_z(t_pos.z());
-	screen_pos.set_w(t_pos.w());
+    clip_pos.set_x(t_clip.x());
+	clip_pos.set_y(t_clip.y());
+	clip_pos.set_z(t_clip.z());
+	clip_pos.set_w(t_clip.w());
   }
 
   void set_normal(Vec3<float> t_normal)
@@ -117,7 +124,7 @@ public:
   
 };
 
-std::optional<Primitive> vertex_shader(FaceTriangles ftriag, Matrix<float, 4, 4> &view_mat, Matrix<float, 4, 4> &persp_mat, Matrix<float, 4, 4> &vprt_mat){
+std::optional<Primitive> vertex_shader(FaceTriangles ftriag, Matrix<float, 4, 4> &view_mat, Matrix<float, 4, 4> &persp_mat){
 
   VertexOut v1;
   VertexOut v2;
@@ -164,27 +171,15 @@ std::optional<Primitive> vertex_shader(FaceTriangles ftriag, Matrix<float, 4, 4>
 	return std::nullopt;
   }
 
+  v1.set_clip_pos(*tri1_clip);
+  v2.set_clip_pos(*tri2_clip);
+  v3.set_clip_pos(*tri3_clip);
+
   //-----Set inverse w for vertexout-----------------//
   v1.inv_w = 1.0F / tri1_clip->w();
   v2.inv_w = 1.0F / tri2_clip->w();
   v3.inv_w = 1.0F / tri3_clip->w();
   //-------------------------------------------------//
-
-  //-----perspective (w) divide--------//
-  *tri1_clip = *tri1_clip * (1.0F/tri1_clip->w());
-  *tri2_clip = *tri2_clip * (1.0F/tri2_clip->w());
-  *tri3_clip = *tri3_clip * (1.0F/tri3_clip->w());
-  //-----------------------------------//
-
-  //----------screen space transform---------//
-  auto tri1_screen = vprt_mat * *tri1_clip;
-  auto tri2_screen = vprt_mat * *tri2_clip;
-  auto tri3_screen = vprt_mat * *tri3_clip;
-
-  v1.set_screen_pos(tri1_screen);
-  v2.set_screen_pos(tri2_screen);
-  v3.set_screen_pos(tri3_screen);
-  //-----------------------------------------//
 
   return Primitive{v1, v2, v3};
 }
@@ -197,22 +192,50 @@ void rasterize(Primitive &primitive,
 			   FragFunc fragment_shader_func)
 {
 
-  auto& [ax, ay, az, aw] = primitive.at(0).screen_pos.vector;
-  auto& [bx, by, bz, bw] = primitive.at(1).screen_pos.vector;
-  auto& [cx, cy, cz, cw] = primitive.at(2).screen_pos.vector;
+  //-----read-primitive-and-initialize-viewport-matrix--------//
+  auto VP_matrix = viewport_matrix(img.width() / 16, img.height() / 16, img.width() * 7 / 8, img.height() * 7 / 8);
+  Vec4<float> clip1_pos = primitive.at(0).clip_pos;
+  Vec4<float> clip2_pos = primitive.at(1).clip_pos;
+  Vec4<float> clip3_pos = primitive.at(2).clip_pos;
+  //----------------------------------------------------------//  
+
+  //-----perspective-(w)-divide--------//
+  clip1_pos = clip1_pos * primitive.at(0).inv_w;
+  clip2_pos = clip2_pos * primitive.at(1).inv_w;
+  clip3_pos = clip3_pos * primitive.at(2).inv_w;
+  //-----------------------------------//  
+
+  //----------screen space transform---------//
+  auto screen1_pos = VP_matrix * clip1_pos;
+  auto screen2_pos = VP_matrix * clip2_pos;
+  auto screen3_pos = VP_matrix * clip3_pos;
+  //-----------------------------------------//
+
+  /// TODO WHY IS THIS NOT WORKING, INSTEAD YOU HAVE TO static_cast TO INT IN THE LOOP!!!
+  //Vec4<int> int_screen1_pos = screen1_pos.round_to_int();
+  //Vec4<int> int_screen2_pos = screen2_pos.round_to_int();
+  //Vec4<int> int_screen3_pos = screen3_pos.round_to_int();
+  
+  auto& [ax, ay, az, aw] = screen1_pos.vector;
+  auto& [bx, by, bz, bw] = screen2_pos.vector;
+  auto& [cx, cy, cz, cw] = screen3_pos.vector;
   
   float sarea_total = s_triangle_area(ax, ay, bx, by, cx, cy);
   
   auto[box_x_min, box_x_max] = std::minmax({ax, bx, cx});
   auto[box_y_min, box_y_max] = std::minmax({ay, by, cy});
+
+  box_x_min = std::clamp(box_x_min, 0.0F, static_cast<float>(img.width()));
+  box_x_max = std::clamp(box_x_max, 0.0F, static_cast<float>(img.width()));
+
+  box_y_min = std::clamp(box_y_min, 0.0F, static_cast<float>(img.height()));
+  box_y_max = std::clamp(box_y_max, 0.0F, static_cast<float>(img.height()));
+
   
-  for (int i = box_x_min; i <= box_x_max; ++i) {
-    for (int j = box_y_min; j <= box_y_max; ++j) {
-
-
+  for (int i = static_cast<int>(box_x_min); i <= static_cast<int>(box_x_max); ++i) {
+    for (int j = static_cast<int>(box_y_min); j <= static_cast<int>(box_y_max); ++j) {
 
 	  //interpolation weights
-
 	  float sareaPBC = s_triangle_area(i, j, bx, by, cx, cy);
       float sareaAPC = s_triangle_area(ax, ay, i, j, cx, cy);
       float sareaABP = s_triangle_area(ax, ay, bx, by, i, j);
@@ -242,12 +265,7 @@ void rasterize(Primitive &primitive,
   }
 }
 
-Matrix<float, 4, 4> viewport_matrix(const int x, const int y, const int w, const int h){
-  return {static_cast<float>(w/2), 0, 0, x + static_cast<float>(w/2),
-		  0, static_cast<float>(h/2), 0, y + static_cast<float>(h/2),
-		  0, 0, 1, 0,
-		  0, 0, 0, 1};
-}
+
 
 Matrix<float, 4, 4> perspective_matrix(const float focal_len){
   return {1, 0, 0, 0,

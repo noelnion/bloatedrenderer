@@ -40,7 +40,7 @@ int main([[maybe_unused]]int argc,[[maybe_unused]] const char** argv){
   
   auto MV_matrix = lookat(eye, center, up);
   auto P_matrix = perspective_matrix((eye - center).mag());
-  auto VP_matrix = viewport_matrix(width / 16, height / 16, width * 7 / 8, height * 7 / 8);
+
 
   //reset z_buffer
   std::fill(diablo_zbfr.begin(), diablo_zbfr.end(), -1000.0F);  //maybe in open_tr
@@ -91,7 +91,7 @@ int main([[maybe_unused]]int argc,[[maybe_unused]] const char** argv){
   auto bound_shader = phong_lam;
    
   while (facestream.getFace(face_triangles)){
-	auto primitive_opt = vertex_shader(face_triangles, MV_matrix, P_matrix, VP_matrix);
+	auto primitive_opt = vertex_shader(face_triangles, MV_matrix, P_matrix);
 	if (!primitive_opt.has_value()){
 	  continue; // safely skip triangle
 	}
@@ -108,7 +108,7 @@ int main([[maybe_unused]]int argc,[[maybe_unused]] const char** argv){
   light_color[2] = 50;  
 	
   while (facestream.getFace(face_triangles)){
-   auto primitive_opt = vertex_shader(face_triangles, MV_matrix, P_matrix, VP_matrix);
+   auto primitive_opt = vertex_shader(face_triangles, MV_matrix, P_matrix);
 	if (!primitive_opt.has_value()){
 	  continue; // safely skip triangle
 	}	 
