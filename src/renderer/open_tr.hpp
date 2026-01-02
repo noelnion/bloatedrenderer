@@ -1,6 +1,9 @@
 #ifndef OPER_TR_HPP
 #define OPEN_TR_HPP
 
+#include <optional>
+#include <algorithm>
+
 #include "math.hpp"
 #include "tgaimage.hpp"
 
@@ -114,7 +117,7 @@ public:
   
 };
 
-Primitive vertex_shader(FaceTriangles ftriag, Matrix<float, 4, 4> &view_mat, Matrix<float, 4, 4> &persp_mat, Matrix<float, 4, 4> &vprt_mat){
+std::optional<Primitive> vertex_shader(FaceTriangles ftriag, Matrix<float, 4, 4> &view_mat, Matrix<float, 4, 4> &persp_mat, Matrix<float, 4, 4> &vprt_mat){
 
   VertexOut v1;
   VertexOut v2;
@@ -144,33 +147,46 @@ Primitive vertex_shader(FaceTriangles ftriag, Matrix<float, 4, 4> &view_mat, Mat
   //-------------------------------------------------//
 
   //---------apply transformations-------------------//
-  Vec4<float> tri1_clip = persp_mat * tri1_m;
-  Vec4<float> tri2_clip = persp_mat * tri2_m;
-  Vec4<float> tri3_clip = persp_mat * tri3_m;
+
+  //--safe-projection---//
+  auto safe_project = [&](const Vec4<float>& v) -> std::optional<Vec4<float>> {
+	if (std::abs(v.w()) < 1e-6f)
+	  return std::nullopt;
+	return v;
+  };
+  
+  auto tri1_clip = safe_project(persp_mat * tri1_m);
+  auto tri2_clip = safe_project(persp_mat * tri2_m);
+  auto tri3_clip = safe_project(persp_mat * tri3_m);
+
+  // redundant?
+  if (!tri1_clip || !tri2_clip || !tri3_clip){
+	return std::nullopt;
+  }
 
   //-----Set inverse w for vertexout-----------------//
-  v1.inv_w = 1.0F / tri1_clip.w();
-  v2.inv_w = 1.0F / tri2_clip.w();
-  v3.inv_w = 1.0F / tri3_clip.w();
+  v1.inv_w = 1.0F / tri1_clip->w();
+  v2.inv_w = 1.0F / tri2_clip->w();
+  v3.inv_w = 1.0F / tri3_clip->w();
   //-------------------------------------------------//
 
   //-----perspective (w) divide--------//
-  tri1_clip = tri1_clip * (1.0F/tri1_clip.w());
-  tri2_clip = tri2_clip * (1.0F/tri2_clip.w());
-  tri3_clip = tri3_clip * (1.0F/tri3_clip.w());
+  *tri1_clip = *tri1_clip * (1.0F/tri1_clip->w());
+  *tri2_clip = *tri2_clip * (1.0F/tri2_clip->w());
+  *tri3_clip = *tri3_clip * (1.0F/tri3_clip->w());
   //-----------------------------------//
 
   //----------screen space transform---------//
-  auto tri1_screen = vprt_mat * tri1_clip;
-  auto tri2_screen = vprt_mat * tri2_clip;
-  auto tri3_screen = vprt_mat * tri3_clip;
+  auto tri1_screen = vprt_mat * *tri1_clip;
+  auto tri2_screen = vprt_mat * *tri2_clip;
+  auto tri3_screen = vprt_mat * *tri3_clip;
 
   v1.set_screen_pos(tri1_screen);
   v2.set_screen_pos(tri2_screen);
   v3.set_screen_pos(tri3_screen);
   //-----------------------------------------//
 
-  return {v1, v2, v3};
+  return Primitive{v1, v2, v3};
 }
 
 

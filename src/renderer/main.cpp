@@ -91,9 +91,11 @@ int main([[maybe_unused]]int argc,[[maybe_unused]] const char** argv){
   auto bound_shader = phong_lam;
    
   while (facestream.getFace(face_triangles)){
-	Primitive primitive = vertex_shader(face_triangles, MV_matrix, P_matrix, VP_matrix);
-	 
-	rasterize(primitive, diablo_fb, diablo_zbfr, bound_shader);
+	auto primitive_opt = vertex_shader(face_triangles, MV_matrix, P_matrix, VP_matrix);
+	if (!primitive_opt.has_value()){
+	  continue; // safely skip triangle
+	}
+	rasterize(*primitive_opt, diablo_fb, diablo_zbfr, bound_shader);
   }
 
   OBJObject<float> eyes {};
@@ -106,9 +108,11 @@ int main([[maybe_unused]]int argc,[[maybe_unused]] const char** argv){
   light_color[2] = 50;  
 	
   while (facestream.getFace(face_triangles)){
-   Primitive primitive = vertex_shader(face_triangles, MV_matrix, P_matrix, VP_matrix);
-	 
-   rasterize(primitive, diablo_fb, diablo_zbfr, bound_shader);
+   auto primitive_opt = vertex_shader(face_triangles, MV_matrix, P_matrix, VP_matrix);
+	if (!primitive_opt.has_value()){
+	  continue; // safely skip triangle
+	}	 
+   rasterize(*primitive_opt, diablo_fb, diablo_zbfr, bound_shader);
  }
 
   diablo_fb.write_tga_file("shading_test.tga");
