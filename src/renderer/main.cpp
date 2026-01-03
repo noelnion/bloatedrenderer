@@ -48,11 +48,11 @@ int main([[maybe_unused]]int argc,[[maybe_unused]] const char** argv){
 
   FacesStream facestream(model);
 
-  FaceTriangles face_triangles {};
+  TriangleVertices face_triangles {};
 
   auto phong_lam = [&](FragmentIn fragIn) -> TGAColor {
-	auto& [tri1, tri2, tri3] = face_triangles;
 
+	std::cout << "called frag_shader" << std::endl;
 
 	Vec4<float> light_mdl = MV_matrix * Vec4<float>(light.x(), light.y(), light.z(), 1.0F);
 	Vec3<float> light_dir_vec(light_mdl.x(), light_mdl.y(), light_mdl.z());

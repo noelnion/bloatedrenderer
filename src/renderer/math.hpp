@@ -107,6 +107,12 @@ public:
   std::array<T, 4> vector;
   Vec4() = default;
   Vec4(T t_x, T t_y, T t_z, T t_w) : vector({t_x, t_y, t_z, t_w}) {}
+  Vec4(Vec3<T> t_vec3, T t_w){
+	vector.at(0) = t_vec3.x();
+	vector.at(1) = t_vec3.y();
+	vector.at(2) = t_vec3.z();
+	vector.at(3) = t_w;
+  }
 
   void print() const {std::print("[0] = {0}, [1] = {1}, [2] = {2}, [3] = {3}\n", vector.at(0), vector.at(1), vector.at(2), vector.at(3));}
 
